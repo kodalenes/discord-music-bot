@@ -272,12 +272,34 @@ export function FullPlayer({
 
   const [r, g, b] = accentRgb;
 
-  const syncedLines = lyricsData?.syncedLines;
+  const isExactSync = Boolean(
+    lyricsData?.syncedLines && lyricsData.syncedLines.length > 0
+  );
+
+  const displayLines = (() => {
+    if (!lyricsData) return [];
+    if (lyricsData.syncedLines && lyricsData.syncedLines.length > 0) {
+      return lyricsData.syncedLines;
+    }
+    const plainLines = lyricsData.lyrics
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (plainLines.length === 0 || duration <= 0) return [];
+    const startSec = Math.min(8, duration * 0.05);
+    const endSec = Math.max(startSec + 1, duration * 0.94);
+    const span = endSec - startSec;
+    return plainLines.map((text, idx) => ({
+      time: startSec + (idx / plainLines.length) * span,
+      text,
+    }));
+  })();
+
   const activeLyricIndex = (() => {
-    if (!syncedLines || syncedLines.length === 0) return -1;
+    if (displayLines.length === 0) return -1;
     let active = -1;
-    for (let i = 0; i < syncedLines.length; i++) {
-      if (syncedLines[i].time <= currentPos + 0.35) {
+    for (let i = 0; i < displayLines.length; i++) {
+      if (displayLines[i].time <= currentPos + 0.35) {
         active = i;
       } else {
         break;
@@ -602,29 +624,27 @@ export function FullPlayer({
                       {currentTrack.title}
                     </span>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {lyricsData.syncedLines &&
-                        lyricsData.syncedLines.length > 0 && (
-                          <span
-                            className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: `rgba(${r}, ${g}, ${b}, 0.38)`,
-                              color: `rgb(${hiR}, ${hiG}, ${hiB})`,
-                              border: `1px solid rgba(${hiR}, ${hiG}, ${hiB}, 0.45)`,
-                            }}
-                          >
-                            Senkron
-                          </span>
-                        )}
+                      {displayLines.length > 0 && (
+                        <span
+                          className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: `rgba(${r}, ${g}, ${b}, 0.38)`,
+                            color: `rgb(${hiR}, ${hiG}, ${hiB})`,
+                            border: `1px solid rgba(${hiR}, ${hiG}, ${hiB}, 0.45)`,
+                          }}
+                        >
+                          {isExactSync ? "Senkron" : "Otomatik Senkron"}
+                        </span>
+                      )}
                       <span className="px-2 py-0.5 rounded-full bg-white/10 text-neutral-300">
                         {lyricsData.source}
                       </span>
                     </div>
                   </div>
 
-                  {lyricsData.syncedLines &&
-                  lyricsData.syncedLines.length > 0 ? (
+                  {displayLines.length > 0 ? (
                     <div className="space-y-2 py-8">
-                      {lyricsData.syncedLines.map((line, idx) => {
+                      {displayLines.map((line, idx) => {
                         const isActive = idx === activeLyricIndex;
                         const isPast =
                           activeLyricIndex >= 0 && idx < activeLyricIndex;
