@@ -110,12 +110,15 @@ export function PlayerBar({
       </div>
 
       <div
-        onClick={onExpand}
-        className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest("button, input")) return;
+          onExpand();
+        }}
+        className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
         title="Tam Ekran Oynatıcıyı Aç"
       >
         {/* Left: Track Information */}
-        <div className="flex items-center gap-3 min-w-0 flex-1 max-w-xs sm:max-w-sm">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-neutral-900 shrink-0 border border-white/5 group/art">
             {currentTrack?.thumbnail ? (
               <img
@@ -141,10 +144,7 @@ export function PlayerBar({
         </div>
 
         {/* Center: Playback Controls */}
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="flex flex-col items-center gap-1 shrink-0 cursor-default"
-        >
+        <div className="flex flex-col items-center gap-1 justify-self-center">
           <div className="flex items-center gap-1.5 sm:gap-3">
             {/* Shuffle */}
             <button
@@ -230,10 +230,7 @@ export function PlayerBar({
         </div>
 
         {/* Right: Volume & Time Controls */}
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center justify-end gap-2 sm:gap-3 flex-1 cursor-default"
-        >
+        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
           {/* Mobile time display */}
           <span className="text-[11px] font-mono text-neutral-400 sm:hidden">
             {formatDuration(currentPos)}
