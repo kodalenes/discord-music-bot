@@ -381,8 +381,8 @@ export function FullPlayer({
       {/* Main Split Content */}
       <div className="relative z-10 flex-1 overflow-y-auto lg:overflow-hidden max-w-7xl w-full mx-auto px-4 sm:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
         {/* Left: Large Cover Art & Controls */}
-        <div className="lg:col-span-6 flex flex-col items-center lg:items-start justify-center lg:pl-4 space-y-6">
-          <div className="w-64 h-64 sm:w-80 sm:h-80 lg:w-[370px] lg:h-[370px] rounded-3xl overflow-hidden bg-neutral-900 shadow-[0_25px_70px_rgba(0,0,0,0.75)] border border-white/15 shrink-0">
+        <div className="lg:col-span-6 flex flex-col items-center justify-center space-y-6">
+          <div className="w-64 h-64 sm:w-80 sm:h-80 lg:w-[380px] lg:h-[380px] rounded-3xl overflow-hidden bg-neutral-900 shadow-[0_25px_70px_rgba(0,0,0,0.75)] border border-white/15 shrink-0">
             {currentTrack?.thumbnail ? (
               <img
                 src={currentTrack.thumbnail}
@@ -396,8 +396,8 @@ export function FullPlayer({
             )}
           </div>
 
-          <div className="w-full max-w-[370px] space-y-4">
-            <div className="text-center lg:text-left">
+          <div className="w-full max-w-[380px] space-y-4">
+            <div className="text-center">
               <h2 className="text-xl sm:text-2xl font-bold text-white truncate">
                 {currentTrack?.title || "Çalınan şarkı yok"}
               </h2>
