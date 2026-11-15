@@ -75,29 +75,95 @@ export default function App() {
     clearError();
   };
 
+  const navigateTo = useCallback(
+    (nextView: ActiveView, fullPlayer = false) => {
+      setView(nextView);
+      setIsFullPlayerOpen(fullPlayer);
+      window.history.pushState(
+        { view: nextView, fullPlayer },
+        "",
+        fullPlayer
+          ? "#player"
+          : nextView.kind === "queue"
+            ? "#queue"
+            : nextView.kind === "playlists"
+              ? "#playlists"
+              : nextView.kind === "artist"
+                ? `#artist/${nextView.artistId}`
+                : `#playlist/${nextView.idOrUrl}`
+      );
+    },
+    []
+  );
+
   const handleOpenArtist = useCallback(
-    async (artistId: string) => {
-      setView({ kind: "artist", artistId });
+    async (artistId: string, pushHistory = true) => {
+      const nextView: ActiveView = { kind: "artist", artistId };
+      if (pushHistory) {
+        navigateTo(nextView, false);
+      } else {
+        setView(nextView);
+      }
       setArtistProfile(null);
       setIsLoadingArtist(true);
       const profile = await getArtistProfile(artistId);
       setArtistProfile(profile);
       setIsLoadingArtist(false);
     },
-    [getArtistProfile]
+    [getArtistProfile, navigateTo]
   );
 
   const handleOpenPlaylist = useCallback(
-    async (idOrUrl: string, isAlbum?: boolean) => {
-      setView({ kind: "playlist", idOrUrl, isAlbum });
+    async (idOrUrl: string, isAlbum?: boolean, pushHistory = true) => {
+      const nextView: ActiveView = { kind: "playlist", idOrUrl, isAlbum };
+      if (pushHistory) {
+        navigateTo(nextView, false);
+      } else {
+        setView(nextView);
+      }
       setPlaylistDetails(null);
       setIsLoadingPlaylist(true);
       const details = await getPlaylistDetails(idOrUrl, isAlbum);
       setPlaylistDetails(details);
       setIsLoadingPlaylist(false);
     },
-    [getPlaylistDetails]
+    [getPlaylistDetails, navigateTo]
   );
+
+  // Browser Back / Forward navigation support (mouse back/forward buttons)
+  useEffect(() => {
+    if (!window.history.state?.view) {
+      window.history.replaceState(
+        { view: { kind: "queue" }, fullPlayer: false },
+        "",
+        "#queue"
+      );
+    }
+
+    const onPopState = (event: PopStateEvent) => {
+      const state = event.state as
+        | { view?: ActiveView; fullPlayer?: boolean }
+        | null;
+      if (!state?.view) {
+        setView({ kind: "queue" });
+        setIsFullPlayerOpen(false);
+        return;
+      }
+
+      setIsFullPlayerOpen(Boolean(state.fullPlayer));
+      const target = state.view;
+      if (target.kind === "artist") {
+        void handleOpenArtist(target.artistId, false);
+      } else if (target.kind === "playlist") {
+        void handleOpenPlaylist(target.idOrUrl, target.isAlbum, false);
+      } else {
+        setView(target);
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [handleOpenArtist, handleOpenPlaylist]);
 
   if (!pin) {
     return <PinModal onSuccess={handleLogin} error={lastError} />;
@@ -110,7 +176,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           {/* Logo */}
           <button
-            onClick={() => setView({ kind: "queue" })}
+            onClick={() => navigateTo({ kind: "queue" }, false)}
             className="flex items-center gap-2.5 shrink-0 cursor-pointer text-left"
           >
             <img
@@ -199,7 +265,7 @@ export default function App() {
         {/* View Switcher Pills */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setView({ kind: "queue" })}
+            onClick={() => navigateTo({ kind: "queue" }, false)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               view.kind === "queue"
                 ? "bg-white text-black shadow"
@@ -211,7 +277,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setView({ kind: "playlists" })}
+            onClick={() => navigateTo({ kind: "playlists" }, false)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               view.kind === "playlists"
                 ? "bg-white text-black shadow"
@@ -247,7 +313,7 @@ export default function App() {
           <ArtistView
             profile={artistProfile}
             isLoading={isLoadingArtist}
-            onBack={() => setView({ kind: "queue" })}
+            onBack={() => window.history.back()}
             onAddTrack={(uri) => addTrack({ uri })}
             onAddAll={(uris) => void addTracks(uris)}
             onPlayNow={(uri) => void playNow({ uri })}
@@ -261,7 +327,7 @@ export default function App() {
           <PlaylistView
             details={playlistDetails}
             isLoading={isLoadingPlaylist}
-            onBack={() => setView({ kind: "queue" })}
+            onBack={() => window.history.back()}
             onAddTrack={(uri) => addTrack({ uri })}
             onAddAll={(uris) => void addTracks(uris)}
             onPlayNow={(uri) => void playNow({ uri })}
@@ -278,13 +344,19 @@ export default function App() {
         onSkip={skip}
         onSeek={seek}
         onSetVolume={setVolume}
-        onExpand={() => setIsFullPlayerOpen(true)}
+        onExpand={() => navigateTo(view, true)}
       />
 
       {/* Fullscreen Now Playing Drawer */}
       <FullPlayer
         isOpen={isFullPlayerOpen}
-        onClose={() => setIsFullPlayerOpen(false)}
+        onClose={() => {
+          if (window.history.state?.fullPlayer) {
+            window.history.back();
+          } else {
+            setIsFullPlayerOpen(false);
+          }
+        }}
         playerState={playerState}
         savedPlaylists={savedPlaylists}
         onPlay={play}
@@ -293,9 +365,12 @@ export default function App() {
         onSeek={seek}
         onSetVolume={setVolume}
         onPlayNow={(trackId) => void playNow({ trackId })}
+        onPlayNowUri={(uri) => void playNow({ uri })}
+        onAddTrack={(uri) => addTrack({ uri })}
+        onAddAll={(uris) => void addTracks(uris)}
         onRemoveTrack={removeTrack}
         onMoveTrack={moveTrack}
-        onOpenPlaylist={(id) => void handleOpenPlaylist(id, false)}
+        onGetPlaylistDetails={getPlaylistDetails}
         onGetLyrics={getLyrics}
       />
     </div>

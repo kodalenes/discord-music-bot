@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import {
   ChevronDown,
   Play,
@@ -15,8 +15,15 @@ import {
   FileText,
   Loader2,
   Radio,
+  ArrowLeft,
+  Plus,
 } from "lucide-react";
-import type { LyricsResult, PlayerState, SavedPlaylist } from "../types";
+import type {
+  LyricsResult,
+  PlayerState,
+  PlaylistDetails,
+  SavedPlaylist,
+} from "../types";
 import { formatDuration } from "../utils";
 
 type RightTab = "queue" | "lyrics" | "playlists";
@@ -32,9 +39,15 @@ interface FullPlayerProps {
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onPlayNow: (trackId: string) => void;
+  onPlayNowUri: (uri: string) => void;
+  onAddTrack: (uri: string) => void;
+  onAddAll: (uris: string[]) => void;
   onRemoveTrack: (trackId: string) => void;
   onMoveTrack: (trackId: string, direction: "up" | "down") => void;
-  onOpenPlaylist: (id: string) => void;
+  onGetPlaylistDetails: (
+    idOrUrl: string,
+    isAlbum?: boolean
+  ) => Promise<PlaylistDetails | null>;
   onGetLyrics: (payload: {
     uri?: string;
     title: string;
@@ -71,7 +84,6 @@ function extractDominantColor(
           const pr = data[i];
           const pg = data[i + 1];
           const pb = data[i + 2];
-          // Skip near-black and near-white pixels for richer accent
           const brightness = (pr + pg + pb) / 3;
           if (brightness > 25 && brightness < 230) {
             r += pr;
@@ -111,9 +123,12 @@ export function FullPlayer({
   onSeek,
   onSetVolume,
   onPlayNow,
+  onPlayNowUri,
+  onAddTrack,
+  onAddAll,
   onRemoveTrack,
   onMoveTrack,
-  onOpenPlaylist,
+  onGetPlaylistDetails,
   onGetLyrics,
 }: FullPlayerProps) {
   const { currentTrack, queue, isPlaying, position, volume } = playerState;
@@ -126,7 +141,11 @@ export function FullPlayer({
 
   const [lyricsData, setLyricsData] = useState<LyricsResult | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
-  const [lyricsTrackKey, setLyricsTrackKey] = useState<string>("");
+  const lyricsTrackKeyRef = useRef<string>("");
+
+  const [selectedPlaylist, setSelectedPlaylist] =
+    useState<PlaylistDetails | null>(null);
+  const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
 
   // Extract dominant color from current track thumbnail
   useEffect(() => {
@@ -147,32 +166,49 @@ export function FullPlayer({
     };
   }, [currentTrack?.thumbnail]);
 
-  // Fetch lyrics when Lyrics tab is opened or track changes while Lyrics tab is open
+  // Fetch lyrics when Lyrics tab is active or track changes
   useEffect(() => {
     if (!isOpen || rightTab !== "lyrics" || !currentTrack) return;
     const key = `${currentTrack.id}|${currentTrack.title}`;
-    if (key === lyricsTrackKey) return;
+    if (key === lyricsTrackKeyRef.current) return;
 
     let cancelled = false;
-    setLyricsTrackKey(key);
+    lyricsTrackKeyRef.current = key;
     setLyricsData(null);
     setIsLoadingLyrics(true);
+
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        setIsLoadingLyrics(false);
+      }
+    }, 10000);
 
     void onGetLyrics({
       uri: currentTrack.uri,
       title: currentTrack.title,
       artist: currentTrack.artist,
-    }).then((res) => {
-      if (!cancelled) {
-        setLyricsData(res);
-        setIsLoadingLyrics(false);
-      }
-    });
+    })
+      .then((res) => {
+        if (!cancelled) {
+          setLyricsData(res);
+          setIsLoadingLyrics(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLyricsData(null);
+          setIsLoadingLyrics(false);
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+      });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
-  }, [isOpen, rightTab, currentTrack, lyricsTrackKey, onGetLyrics]);
+  }, [isOpen, rightTab, currentTrack, onGetLyrics]);
 
   // Close on Escape key
   useEffect(() => {
@@ -183,6 +219,14 @@ export function FullPlayer({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
+
+  const handleSelectPlaylist = async (id: string) => {
+    setSelectedPlaylist(null);
+    setIsLoadingPlaylist(true);
+    const details = await onGetPlaylistDetails(id, false);
+    setSelectedPlaylist(details);
+    setIsLoadingPlaylist(false);
+  };
 
   const duration = currentTrack?.duration || 0;
   const currentPos = isSeeking ? localSeekPos : position;
@@ -416,8 +460,8 @@ export function FullPlayer({
 
           {/* Tab Body */}
           <div className="flex-1 overflow-y-auto p-3 sm:p-4">
-            {rightTab === "queue" && (
-              queue.length === 0 ? (
+            {rightTab === "queue" &&
+              (queue.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-400 text-sm py-12">
                   <Music className="w-8 h-8 opacity-30 mb-2" />
                   <p>Sırada başka şarkı yok</p>
@@ -495,11 +539,10 @@ export function FullPlayer({
                     </div>
                   ))}
                 </div>
-              )
-            )}
+              ))}
 
-            {rightTab === "lyrics" && (
-              !currentTrack ? (
+            {rightTab === "lyrics" &&
+              (!currentTrack ? (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-400 text-sm py-12">
                   <FileText className="w-8 h-8 opacity-30 mb-2" />
                   <p>Şu an çalan şarkı yok</p>
@@ -528,11 +571,103 @@ export function FullPlayer({
                   <FileText className="w-8 h-8 opacity-30 mb-2" />
                   <p>Bu şarkı için söz bulunamadı.</p>
                 </div>
-              )
-            )}
+              ))}
 
-            {rightTab === "playlists" && (
-              savedPlaylists.length === 0 ? (
+            {rightTab === "playlists" &&
+              (isLoadingPlaylist ? (
+                <div className="h-full flex flex-col items-center justify-center text-neutral-300 text-sm gap-2 py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-red-400" />
+                  <span>Çalma listesi yükleniyor...</span>
+                </div>
+              ) : selectedPlaylist ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/10">
+                    <button
+                      onClick={() => setSelectedPlaylist(null)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Listelerim</span>
+                    </button>
+                    <p className="text-xs font-semibold text-white truncate flex-1 text-center">
+                      {selectedPlaylist.title} ({selectedPlaylist.tracks.length})
+                    </p>
+                    {selectedPlaylist.tracks.length > 0 && (
+                      <button
+                        onClick={() =>
+                          onAddAll(
+                            selectedPlaylist.tracks.map((track) => track.uri)
+                          )
+                        }
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-xs font-semibold cursor-pointer shrink-0"
+                        title="Tümünü Sıraya Ekle"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tümünü Ekle</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="divide-y divide-white/5">
+                    {selectedPlaylist.tracks.map((track, idx) => (
+                      <div
+                        key={`${track.id}-${idx}`}
+                        className="flex items-center gap-3 py-2 px-1.5 rounded-xl hover:bg-white/5 transition-colors group"
+                      >
+                        <span className="w-5 text-center text-xs font-mono text-neutral-500 shrink-0">
+                          {idx + 1}
+                        </span>
+
+                        <button
+                          onClick={() => onPlayNowUri(track.uri)}
+                          className="relative w-10 h-10 rounded-lg overflow-hidden bg-neutral-800 shrink-0 cursor-pointer group/thumb"
+                          title="Şimdi Çal"
+                        >
+                          {track.thumbnail ? (
+                            <img
+                              src={track.thumbnail}
+                              alt={track.title}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-neutral-600">
+                              <Music className="w-4 h-4" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                            <Play className="w-4 h-4 text-white fill-current" />
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => onPlayNowUri(track.uri)}
+                          className="min-w-0 flex-1 text-left cursor-pointer"
+                          title="Şimdi Çal"
+                        >
+                          <p className="text-sm font-medium text-white truncate group-hover:text-red-400 transition-colors">
+                            {track.title}
+                          </p>
+                          <p className="text-xs text-neutral-400 truncate">
+                            {track.artist}
+                            {track.duration > 0
+                              ? ` • ${formatDuration(track.duration)}`
+                              : ""}
+                          </p>
+                        </button>
+
+                        <button
+                          onClick={() => onAddTrack(track.uri)}
+                          className="p-2 rounded-full bg-white/10 hover:bg-white text-white hover:text-black transition-all cursor-pointer shrink-0"
+                          title="Kuyruğa Ekle"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : savedPlaylists.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-400 text-sm py-12 text-center">
                   <ListMusic className="w-8 h-8 opacity-30 mb-2" />
                   <p>Henüz kayıtlı çalma listesi yok.</p>
@@ -542,10 +677,7 @@ export function FullPlayer({
                   {savedPlaylists.map((pl) => (
                     <button
                       key={pl.id}
-                      onClick={() => {
-                        onOpenPlaylist(pl.id);
-                        onClose();
-                      }}
+                      onClick={() => void handleSelectPlaylist(pl.id)}
                       className="w-full flex items-center gap-3 p-2.5 rounded-2xl bg-white/[0.04] hover:bg-white/10 border border-white/5 transition-colors text-left cursor-pointer group"
                     >
                       <div className="w-12 h-12 rounded-xl overflow-hidden bg-neutral-800 shrink-0">
@@ -574,8 +706,7 @@ export function FullPlayer({
                     </button>
                   ))}
                 </div>
-              )
-            )}
+              ))}
           </div>
         </div>
       </div>
