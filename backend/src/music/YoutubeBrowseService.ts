@@ -7,6 +7,7 @@ import type {
   PlaylistDetails,
   PlaylistSearchResult,
   SearchTrackResult,
+  SyncedLyricLine,
 } from "../types.js";
 
 interface RawThumb {
@@ -389,25 +390,24 @@ export class YoutubeBrowseService {
     title: string;
     artist: string;
   }): Promise<LyricsResult | null> {
-    // 1. Try YouTube Music built-in lyrics if videoId is available
-    if (payload.uri) {
-      try {
-        const parsed = new URL(payload.uri);
-        const videoId = parsed.searchParams.get("v");
-        if (videoId) {
-          const yt = await this.getClient();
-          const shelf = await yt.music.getLyrics(videoId);
-          const text = shelf?.description?.text?.trim();
-          if (text) {
-            return { lyrics: text, source: "YouTube Music" };
-          }
+    const parseLrc = (lrc: string): SyncedLyricLine[] => {
+      const lines: SyncedLyricLine[] = [];
+      const regex = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)/;
+      for (const rawLine of lrc.split(/\r?\n/)) {
+        const match = rawLine.match(regex);
+        if (!match) continue;
+        const mins = Number(match[1]);
+        const secs = Number(match[2]);
+        const msPart = match[3] ? Number(match[3].padEnd(3, "0").slice(0, 3)) : 0;
+        const time = mins * 60 + secs + msPart / 1000;
+        const text = match[4]?.trim() ?? "";
+        if (text) {
+          lines.push({ time, text });
         }
-      } catch {
-        // Fallback to LRCLIB below
       }
-    }
+      return lines;
+    };
 
-    // 2. Fallback to LRCLIB public API
     const cleanTitle = payload.title
       .replace(/\(.*?\)|\[.*?\]/g, "")
       .replace(/official\s*(music\s*)?video|lyrics|audio|hd|4k/gi, "")
@@ -416,6 +416,9 @@ export class YoutubeBrowseService {
       .replace(/\s*-\s*Topic$/i, "")
       .trim();
 
+    let plainFallback: LyricsResult | null = null;
+
+    // 1. Try LRCLIB first so we get timestamped syncedLyrics when available
     const searchQueries = [
       `https://lrclib.net/api/search?track_name=${encodeURIComponent(cleanTitle)}&artist_name=${encodeURIComponent(cleanArtist)}`,
       `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanArtist} ${cleanTitle}`)}`,
@@ -433,16 +436,27 @@ export class YoutubeBrowseService {
         }>;
         if (!Array.isArray(items) || items.length === 0) continue;
 
-        const match = items.find(
-          (item) => item.plainLyrics?.trim() || item.syncedLyrics?.trim()
-        );
-        if (match) {
-          const text =
-            match.plainLyrics?.trim() ||
-            match.syncedLyrics?.replace(/\[\d+:\d+(?:\.\d+)?\]\s*/g, "").trim() ||
-            "";
-          if (text) {
-            return { lyrics: text, source: "LRCLIB" };
+        const syncedMatch = items.find((item) => item.syncedLyrics?.trim());
+        if (syncedMatch?.syncedLyrics) {
+          const syncedLines = parseLrc(syncedMatch.syncedLyrics);
+          if (syncedLines.length > 0) {
+            return {
+              lyrics:
+                syncedMatch.plainLyrics?.trim() ||
+                syncedLines.map((l) => l.text).join("\n"),
+              syncedLines,
+              source: "LRCLIB",
+            };
+          }
+        }
+
+        if (!plainFallback) {
+          const plainMatch = items.find((item) => item.plainLyrics?.trim());
+          if (plainMatch?.plainLyrics) {
+            plainFallback = {
+              lyrics: plainMatch.plainLyrics.trim(),
+              source: "LRCLIB",
+            };
           }
         }
       } catch {
@@ -450,6 +464,24 @@ export class YoutubeBrowseService {
       }
     }
 
-    return null;
+    // 2. Try YouTube Music built-in lyrics if no synced lyrics were found
+    if (payload.uri) {
+      try {
+        const parsed = new URL(payload.uri);
+        const videoId = parsed.searchParams.get("v");
+        if (videoId) {
+          const yt = await this.getClient();
+          const shelf = await yt.music.getLyrics(videoId);
+          const text = shelf?.description?.text?.trim();
+          if (text) {
+            return { lyrics: text, source: "YouTube Music" };
+          }
+        }
+      } catch {
+        // Ignore and use plainFallback
+      }
+    }
+
+    return plainFallback;
   }
 }

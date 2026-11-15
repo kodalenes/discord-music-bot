@@ -146,6 +146,7 @@ export function FullPlayer({
   const [selectedPlaylist, setSelectedPlaylist] =
     useState<PlaylistDetails | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
+  const activeLyricRef = useRef<HTMLButtonElement | null>(null);
 
   // Extract dominant color from current track thumbnail
   useEffect(() => {
@@ -255,6 +256,33 @@ export function FullPlayer({
   };
 
   const [r, g, b] = accentRgb;
+
+  const syncedLines = lyricsData?.syncedLines;
+  const activeLyricIndex = (() => {
+    if (!syncedLines || syncedLines.length === 0) return -1;
+    let active = -1;
+    for (let i = 0; i < syncedLines.length; i++) {
+      if (syncedLines[i].time <= currentPos + 0.35) {
+        active = i;
+      } else {
+        break;
+      }
+    }
+    return active;
+  })();
+
+  useEffect(() => {
+    if (!isOpen || rightTab !== "lyrics" || activeLyricIndex < 0) return;
+    activeLyricRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [activeLyricIndex, isOpen, rightTab]);
+
+  // Boosted bright accent color for active lyric highlight
+  const hiR = Math.min(255, r + 90);
+  const hiG = Math.min(255, g + 90);
+  const hiB = Math.min(255, b + 90);
 
   return (
     <div
@@ -554,17 +582,70 @@ export function FullPlayer({
                 </div>
               ) : lyricsData ? (
                 <div className="space-y-4 px-2 py-2">
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400 border-b border-white/10 pb-2">
+                  <div className="flex items-center justify-between text-[11px] text-neutral-400 border-b border-white/10 pb-2 sticky top-0 bg-black/50 backdrop-blur-md z-10 px-1 rounded-lg">
                     <span className="font-semibold text-neutral-300 truncate">
                       {currentTrack.title}
                     </span>
-                    <span className="px-2 py-0.5 rounded-full bg-white/10 text-neutral-300 shrink-0">
-                      Kaynak: {lyricsData.source}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {lyricsData.syncedLines &&
+                        lyricsData.syncedLines.length > 0 && (
+                          <span
+                            className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: `rgba(${r}, ${g}, ${b}, 0.38)`,
+                              color: `rgb(${hiR}, ${hiG}, ${hiB})`,
+                              border: `1px solid rgba(${hiR}, ${hiG}, ${hiB}, 0.45)`,
+                            }}
+                          >
+                            Senkron
+                          </span>
+                        )}
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-neutral-300">
+                        {lyricsData.source}
+                      </span>
+                    </div>
                   </div>
-                  <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base leading-relaxed text-neutral-100">
-                    {lyricsData.lyrics}
-                  </pre>
+
+                  {lyricsData.syncedLines &&
+                  lyricsData.syncedLines.length > 0 ? (
+                    <div className="space-y-2 py-8">
+                      {lyricsData.syncedLines.map((line, idx) => {
+                        const isActive = idx === activeLyricIndex;
+                        const isPast =
+                          activeLyricIndex >= 0 && idx < activeLyricIndex;
+                        return (
+                          <button
+                            key={`${line.time}-${idx}`}
+                            ref={isActive ? activeLyricRef : null}
+                            onClick={() => onSeek(Math.floor(line.time))}
+                            style={
+                              isActive
+                                ? {
+                                    background: `linear-gradient(90deg, rgba(${r}, ${g}, ${b}, 0.45) 0%, rgba(${r}, ${g}, ${b}, 0.12) 100%)`,
+                                    borderLeft: `3px solid rgb(${hiR}, ${hiG}, ${hiB})`,
+                                    textShadow: `0 0 18px rgba(${hiR}, ${hiG}, ${hiB}, 0.55)`,
+                                  }
+                                : undefined
+                            }
+                            className={`w-full text-left px-3.5 py-2.5 rounded-xl transition-all duration-300 ease-out cursor-pointer block ${
+                              isActive
+                                ? "text-white font-bold text-base sm:text-lg scale-[1.02] shadow-lg"
+                                : isPast
+                                  ? "text-neutral-500/75 text-sm sm:text-base hover:text-neutral-300"
+                                  : "text-neutral-300/65 text-sm sm:text-base hover:text-white"
+                            }`}
+                            title="Bu satıra atla"
+                          >
+                            {line.text}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base leading-relaxed text-neutral-100">
+                      {lyricsData.lyrics}
+                    </pre>
+                  )}
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-400 text-sm py-12 text-center">

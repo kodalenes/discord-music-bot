@@ -75,8 +75,14 @@ export interface SavedPlaylist {
   url: string;
 }
 
+export interface SyncedLyricLine {
+  time: number; // seconds
+  text: string;
+}
+
 export interface LyricsResult {
   lyrics: string;
+  syncedLines?: SyncedLyricLine[];
   source: string;
 }
 
