@@ -379,9 +379,9 @@ export function FullPlayer({
       </div>
 
       {/* Main Split Content */}
-      <div className="relative z-10 flex-1 overflow-y-auto lg:overflow-hidden max-w-7xl w-full mx-auto px-4 sm:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+      <div className="relative z-10 flex-1 overflow-y-auto lg:overflow-hidden w-full px-4 sm:px-8 lg:px-10 py-6 flex flex-col lg:flex-row gap-8 items-center">
         {/* Left: Large Cover Art & Controls */}
-        <div className="lg:col-span-6 flex flex-col items-center justify-center space-y-6">
+        <div className="w-full lg:flex-1 flex flex-col items-center justify-center space-y-6">
           <div className="w-64 h-64 sm:w-80 sm:h-80 lg:w-[380px] lg:h-[380px] rounded-3xl overflow-hidden bg-neutral-900 shadow-[0_25px_70px_rgba(0,0,0,0.75)] border border-white/15 shrink-0">
             {currentTrack?.thumbnail ? (
               <img
@@ -534,7 +534,7 @@ export function FullPlayer({
         </div>
 
         {/* Right: Queue / Lyrics / Playlists Panel */}
-        <div className="lg:col-span-6 flex flex-col h-[460px] lg:h-[calc(100vh-140px)] bg-black/35 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="w-full lg:w-[480px] xl:w-[540px] shrink-0 flex flex-col h-[460px] lg:h-[calc(100vh-140px)] bg-black/35 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
           {/* Tabs */}
           <div className="flex items-center gap-1 p-3 border-b border-white/10 bg-white/[0.03]">
             <button
