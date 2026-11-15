@@ -17,12 +17,14 @@ import {
 import { config } from "../config.js";
 import type {
   AudioFilterPreset,
+  ListeningStats,
   LoopMode,
   PlayerState,
   QueueTrack,
   ReorderPayload,
   SearchTrackResult,
 } from "../types.js";
+import { StatsStore } from "./StatsStore.js";
 import { YoutubeBrowseService } from "./YoutubeBrowseService.js";
 
 const URL_REGEX = /^https?:\/\//i;
@@ -42,6 +44,7 @@ export class MusicManager {
   private paused = false;
   private volume = 80;
   private readonly browseService = new YoutubeBrowseService();
+  private readonly statsStore = new StatsStore();
   private trackStartTimestamp = 0;
   private pausedPositionMs = 0;
 
@@ -51,9 +54,14 @@ export class MusicManager {
   private rejoinTimer: NodeJS.Timeout | null = null;
 
   private readonly onStateChange: (state: PlayerState) => void;
+  private readonly onStatsChange?: (stats: ListeningStats) => void;
 
-  constructor(onStateChange: (state: PlayerState) => void) {
+  constructor(
+    onStateChange: (state: PlayerState) => void,
+    onStatsChange?: (stats: ListeningStats) => void
+  ) {
     this.onStateChange = onStateChange;
+    this.onStatsChange = onStatsChange;
 
     this.client = new Client({
       intents: [
@@ -265,6 +273,10 @@ export class MusicManager {
       this.trackStartTimestamp = Date.now();
       this.pausedPositionMs = 0;
       this.sessionPlayCount += 1;
+      if (this.currentTrack) {
+        const updatedStats = this.statsStore.recordPlay(this.currentTrack);
+        this.onStatsChange?.(updatedStats);
+      }
       this.emitState();
     });
 
@@ -791,6 +803,10 @@ export class MusicManager {
       audioFilter: this.audioFilter,
       sessionPlayCount: this.sessionPlayCount,
     };
+  }
+
+  public getStats(): ListeningStats {
+    return this.statsStore.getSummary();
   }
 
   private emitState(): void {

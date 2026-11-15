@@ -7,6 +7,7 @@ import {
   Radio,
   Compass,
   Users,
+  BarChart3,
 } from "lucide-react";
 import { PinModal } from "./components/PinModal";
 import { SearchBar } from "./components/SearchBar";
@@ -17,6 +18,7 @@ import { ArtistView } from "./components/ArtistView";
 import { PlaylistView } from "./components/PlaylistView";
 import { SavedPlaylists } from "./components/SavedPlaylists";
 import { ExploreView } from "./components/ExploreView";
+import { StatsView } from "./components/StatsView";
 import { useSocket } from "./hooks/useSocket";
 import type { ArtistProfile, ExploreFeed, PlaylistDetails } from "./types";
 
@@ -27,6 +29,7 @@ type ActiveView =
   | { kind: "queue" }
   | { kind: "explore" }
   | { kind: "playlists" }
+  | { kind: "stats" }
   | { kind: "artist"; artistId: string }
   | { kind: "playlist"; idOrUrl: string; isAlbum?: boolean };
 
@@ -54,6 +57,7 @@ export default function App() {
   const {
     playerState,
     savedPlaylists,
+    stats,
     connectedUsers,
     notices,
     isConnected,
@@ -124,9 +128,11 @@ export default function App() {
               ? "#explore"
               : nextView.kind === "playlists"
                 ? "#playlists"
-                : nextView.kind === "artist"
-                  ? `#artist/${nextView.artistId}`
-                  : `#playlist/${nextView.idOrUrl}`
+                : nextView.kind === "stats"
+                  ? "#stats"
+                  : nextView.kind === "artist"
+                    ? `#artist/${nextView.artistId}`
+                    : `#playlist/${nextView.idOrUrl}`
       );
     },
     []
@@ -505,6 +511,18 @@ export default function App() {
             <ListMusic className="w-3.5 h-3.5" />
             Listelerim ({savedPlaylists.length})
           </button>
+
+          <button
+            onClick={() => navigateTo({ kind: "stats" }, false)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              view.kind === "stats"
+                ? "bg-white text-black shadow"
+                : "bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            İstatistikler
+          </button>
         </div>
 
         {view.kind === "queue" && (
@@ -540,6 +558,15 @@ export default function App() {
             onSavePlaylist={savePlaylist}
             onDeletePlaylist={deletePlaylist}
             onOpenPlaylist={(id) => void handleOpenPlaylist(id, false)}
+          />
+        )}
+
+        {view.kind === "stats" && (
+          <StatsView
+            stats={stats}
+            sessionPlayCount={playerState.sessionPlayCount}
+            onPlayNow={(uri) => void playNow({ uri })}
+            onAddTrack={(uri) => addTrack({ uri })}
           />
         )}
 

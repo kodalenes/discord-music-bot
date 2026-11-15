@@ -6,9 +6,14 @@ async function main(): Promise<void> {
 
   const server = createServer(() => manager);
 
-  manager = new MusicManager((state) => {
-    server.broadcastState(state);
-  });
+  manager = new MusicManager(
+    (state) => {
+      server.broadcastState(state);
+    },
+    (stats) => {
+      server.broadcastStats(stats);
+    }
+  );
 
   await server.start();
   await manager.start();

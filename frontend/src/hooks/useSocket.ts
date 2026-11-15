@@ -7,6 +7,7 @@ import type {
   BrowseSearchResult,
   ConnectedUser,
   ExploreFeed,
+  ListeningStats,
   LoopMode,
   LyricsResult,
   PlayerState,
@@ -14,6 +15,15 @@ import type {
   SavedPlaylist,
   SearchResult,
 } from "../types";
+
+const INITIAL_STATS: ListeningStats = {
+  totalPlays: 0,
+  totalDurationSeconds: 0,
+  topTracks: [],
+  topArtists: [],
+  topRequesters: [],
+  updatedAt: 0,
+};
 
 const INITIAL_PLAYER_STATE: PlayerState = {
   currentTrack: null,
@@ -32,6 +42,7 @@ const INITIAL_PLAYER_STATE: PlayerState = {
 export function useSocket(pin: string | null, nickname: string) {
   const [playerState, setPlayerState] = useState<PlayerState>(INITIAL_PLAYER_STATE);
   const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
+  const [stats, setStats] = useState<ListeningStats>(INITIAL_STATS);
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
   const [notices, setNotices] = useState<ActivityNotice[]>([]);
   const [isConnected, setIsConnected] = useState(socket.connected);
@@ -64,6 +75,9 @@ export function useSocket(pin: string | null, nickname: string) {
       socket.emit("playlists:list", (items) => {
         if (Array.isArray(items)) setSavedPlaylists(items);
       });
+      socket.emit("stats:get", (s) => {
+        if (s) setStats(s);
+      });
     };
 
     const onDisconnect = () => {
@@ -90,6 +104,10 @@ export function useSocket(pin: string | null, nickname: string) {
       setConnectedUsers(users);
     };
 
+    const onStatsUpdated = (updated: ListeningStats) => {
+      setStats(updated);
+    };
+
     const onActivityNotice = (notice: ActivityNotice) => {
       setNotices((prev) => [...prev.slice(-3), notice]);
       window.setTimeout(() => {
@@ -108,6 +126,7 @@ export function useSocket(pin: string | null, nickname: string) {
     socket.on("playlists:updated", onPlaylistsUpdated);
     socket.on("users:updated", onUsersUpdated);
     socket.on("activity:notice", onActivityNotice);
+    socket.on("stats:updated", onStatsUpdated);
     socket.on("error", onError);
 
     return () => {
@@ -118,6 +137,7 @@ export function useSocket(pin: string | null, nickname: string) {
       socket.off("playlists:updated", onPlaylistsUpdated);
       socket.off("users:updated", onUsersUpdated);
       socket.off("activity:notice", onActivityNotice);
+      socket.off("stats:updated", onStatsUpdated);
       socket.off("error", onError);
     };
   }, [pin, nickname]);
@@ -343,6 +363,7 @@ export function useSocket(pin: string | null, nickname: string) {
   return {
     playerState,
     savedPlaylists,
+    stats,
     connectedUsers,
     notices,
     isConnected,

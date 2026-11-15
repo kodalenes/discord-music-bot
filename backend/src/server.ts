@@ -8,6 +8,7 @@ import { SavedPlaylistsStore } from "./music/SavedPlaylistsStore.js";
 import { YoutubeBrowseService } from "./music/YoutubeBrowseService.js";
 import type {
   ClientToServerEvents,
+  ListeningStats,
   PlayerState,
   ServerToClientEvents,
 } from "./types.js";
@@ -19,6 +20,7 @@ export interface AppServer {
   io: TypedIO;
   httpServer: http.Server;
   broadcastState: (state: PlayerState) => void;
+  broadcastStats: (stats: ListeningStats) => void;
   start: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -107,6 +109,7 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
     // Send initial state immediately on connect
     socket.emit("state:sync", manager.getState());
     socket.emit("playlists:updated", playlistsStore.list());
+    socket.emit("stats:updated", manager.getStats());
     broadcastUsers();
 
     socket.on("user:setNickname", (nickname) => {
@@ -435,6 +438,10 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       }
     });
 
+    socket.on("stats:get", (callback) => {
+      callback(manager.getStats());
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Socket.io] Client disconnected (${socket.id}): ${reason}`);
       connectedUsers.delete(socket.id);
@@ -444,6 +451,10 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
 
   const broadcastState = (state: PlayerState): void => {
     io.emit("state:sync", state);
+  };
+
+  const broadcastStats = (stats: ListeningStats): void => {
+    io.emit("stats:updated", stats);
   };
 
   const start = (): Promise<void> =>
@@ -467,6 +478,7 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
     io,
     httpServer,
     broadcastState,
+    broadcastStats,
     start,
     close,
   };

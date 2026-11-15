@@ -117,6 +117,36 @@ export interface LyricsResult {
   source: string;
 }
 
+export interface TopTrackStat {
+  key: string;
+  title: string;
+  artist: string;
+  thumbnail: string;
+  uri: string;
+  duration: number;
+  playCount: number;
+  lastPlayedAt: number;
+}
+
+export interface TopArtistStat {
+  artist: string;
+  playCount: number;
+}
+
+export interface TopRequesterStat {
+  nickname: string;
+  playCount: number;
+}
+
+export interface ListeningStats {
+  totalPlays: number;
+  totalDurationSeconds: number;
+  topTracks: TopTrackStat[];
+  topArtists: TopArtistStat[];
+  topRequesters: TopRequesterStat[];
+  updatedAt: number;
+}
+
 export interface ActionAck {
   ok: boolean;
   error?: string;
@@ -203,6 +233,7 @@ export interface ClientToServerEvents {
     payload: { uri?: string; title: string; artist: string },
     callback: (result: LyricsResult | null) => void
   ) => void;
+  "stats:get": (callback: (stats: ListeningStats) => void) => void;
 }
 
 export interface ServerToClientEvents {
@@ -210,5 +241,6 @@ export interface ServerToClientEvents {
   "playlists:updated": (items: SavedPlaylist[]) => void;
   "users:updated": (users: ConnectedUser[]) => void;
   "activity:notice": (notice: ActivityNotice) => void;
+  "stats:updated": (stats: ListeningStats) => void;
   error: (error: { message: string }) => void;
 }
