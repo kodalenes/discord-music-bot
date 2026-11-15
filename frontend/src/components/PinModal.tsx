@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Lock, ArrowRight, Music2, AlertCircle } from "lucide-react";
+import { Lock, ArrowRight, AlertCircle } from "lucide-react";
 
 interface PinModalProps {
   onSuccess: (pin: string) => void;
@@ -30,9 +30,11 @@ export function PinModal({ onSuccess, error }: PinModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#030303]/85 backdrop-blur-md">
       <div className="w-full max-w-md bg-[#121212] border border-white/10 rounded-2xl p-8 shadow-2xl transition-all">
         <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-14 h-14 rounded-full bg-red-600/10 border border-red-500/20 flex items-center justify-center mb-4 text-red-500">
-            <Music2 className="w-7 h-7" />
-          </div>
+          <img
+            src="/Ikarus_Logo.webp"
+            alt="ikarusgg"
+            className="w-16 h-16 rounded-2xl object-cover mb-4 shadow-xl border border-white/10"
+          />
           <h2 className="text-2xl font-bold tracking-tight text-white">muzik.ikarusgg.me</h2>
           <p className="text-sm text-neutral-400 mt-1">
             Müzik merkezine erişmek için erişim PIN kodunu girin

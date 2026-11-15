@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Music2, Wifi, WifiOff, LogOut, ListMusic, Radio } from "lucide-react";
+import { Wifi, WifiOff, LogOut, ListMusic, Radio } from "lucide-react";
 import { PinModal } from "./components/PinModal";
 import { SearchBar } from "./components/SearchBar";
 import { Queue } from "./components/Queue";
@@ -110,9 +110,11 @@ export default function App() {
             onClick={() => setView({ kind: "queue" })}
             className="flex items-center gap-2.5 shrink-0 cursor-pointer text-left"
           >
-            <div className="w-9 h-9 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/30">
-              <Music2 className="w-5 h-5" />
-            </div>
+            <img
+              src="/Ikarus_Logo.webp"
+              alt="ikarusgg"
+              className="w-9 h-9 rounded-xl object-cover shadow-lg border border-white/10"
+            />
             <div>
               <span className="font-bold tracking-tight text-lg sm:text-xl text-white">
                 muzik
