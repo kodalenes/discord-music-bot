@@ -142,6 +142,8 @@ export function extractPlaylistId(input: string): string {
 
 export class YoutubeBrowseService {
   private ytPromise: Promise<Innertube> | null = null;
+  private lyricsCache = new Map<string, LyricsResult | null>();
+  private lyricsInFlight = new Map<string, Promise<LyricsResult | null>>();
 
   private getClient(): Promise<Innertube> {
     if (!this.ytPromise) {
@@ -390,6 +392,36 @@ export class YoutubeBrowseService {
     title: string;
     artist: string;
   }): Promise<LyricsResult | null> {
+    const cacheKey = `${payload.uri ?? ""}|${payload.title}|${payload.artist}`;
+    if (this.lyricsCache.has(cacheKey)) {
+      return this.lyricsCache.get(cacheKey) ?? null;
+    }
+
+    const existing = this.lyricsInFlight.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = this.fetchLyricsUncached(payload).then((result) => {
+      this.lyricsCache.set(cacheKey, result);
+      this.lyricsInFlight.delete(cacheKey);
+      // Keep cache bounded to 100 entries
+      if (this.lyricsCache.size > 100) {
+        const firstKey = this.lyricsCache.keys().next().value;
+        if (firstKey !== undefined) this.lyricsCache.delete(firstKey);
+      }
+      return result;
+    });
+
+    this.lyricsInFlight.set(cacheKey, promise);
+    return promise;
+  }
+
+  private async fetchLyricsUncached(payload: {
+    uri?: string;
+    title: string;
+    artist: string;
+  }): Promise<LyricsResult | null> {
     const parseLrc = (lrc: string): SyncedLyricLine[] => {
       const lines: SyncedLyricLine[] = [];
       const regex = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)/;
@@ -416,72 +448,72 @@ export class YoutubeBrowseService {
       .replace(/\s*-\s*Topic$/i, "")
       .trim();
 
-    let plainFallback: LyricsResult | null = null;
+    const fetchLrc = async (url: string) => {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "TARmusic/1.0" },
+        signal: AbortSignal.timeout(3500),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as Array<{
+        plainLyrics?: string;
+        syncedLyrics?: string;
+      }>;
+    };
 
-    // 1. Try LRCLIB first so we get timestamped syncedLyrics when available
-    const searchQueries = [
-      `https://lrclib.net/api/search?track_name=${encodeURIComponent(cleanTitle)}&artist_name=${encodeURIComponent(cleanArtist)}`,
-      `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanArtist} ${cleanTitle}`)}`,
+    const fetchYtLyrics = async (): Promise<string | null> => {
+      if (!payload.uri) return null;
+      const parsed = new URL(payload.uri);
+      const videoId = parsed.searchParams.get("v");
+      if (!videoId) return null;
+      const yt = await this.getClient();
+      const shelf = await yt.music.getLyrics(videoId);
+      return shelf?.description?.text?.trim() || null;
+    };
+
+    const lrcUrl1 = `https://lrclib.net/api/search?track_name=${encodeURIComponent(cleanTitle)}&artist_name=${encodeURIComponent(cleanArtist)}`;
+    const lrcUrl2 = `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanArtist} ${cleanTitle}`)}`;
+
+    const [lrc1Res, lrc2Res, ytRes] = await Promise.allSettled([
+      fetchLrc(lrcUrl1),
+      fetchLrc(lrcUrl2),
+      fetchYtLyrics(),
+    ]);
+
+    const lrcItems = [
+      ...(lrc1Res.status === "fulfilled" && Array.isArray(lrc1Res.value)
+        ? lrc1Res.value
+        : []),
+      ...(lrc2Res.status === "fulfilled" && Array.isArray(lrc2Res.value)
+        ? lrc2Res.value
+        : []),
     ];
 
-    for (const url of searchQueries) {
-      try {
-        const res = await fetch(url, {
-          headers: { "User-Agent": "TARmusic/1.0" },
-        });
-        if (!res.ok) continue;
-        const items = (await res.json()) as Array<{
-          plainLyrics?: string;
-          syncedLyrics?: string;
-        }>;
-        if (!Array.isArray(items) || items.length === 0) continue;
-
-        const syncedMatch = items.find((item) => item.syncedLyrics?.trim());
-        if (syncedMatch?.syncedLyrics) {
-          const syncedLines = parseLrc(syncedMatch.syncedLyrics);
-          if (syncedLines.length > 0) {
-            return {
-              lyrics:
-                syncedMatch.plainLyrics?.trim() ||
-                syncedLines.map((l) => l.text).join("\n"),
-              syncedLines,
-              source: "LRCLIB",
-            };
-          }
-        }
-
-        if (!plainFallback) {
-          const plainMatch = items.find((item) => item.plainLyrics?.trim());
-          if (plainMatch?.plainLyrics) {
-            plainFallback = {
-              lyrics: plainMatch.plainLyrics.trim(),
-              source: "LRCLIB",
-            };
-          }
-        }
-      } catch {
-        // Try next query
+    const syncedMatch = lrcItems.find((item) => item.syncedLyrics?.trim());
+    if (syncedMatch?.syncedLyrics) {
+      const syncedLines = parseLrc(syncedMatch.syncedLyrics);
+      if (syncedLines.length > 0) {
+        return {
+          lyrics:
+            syncedMatch.plainLyrics?.trim() ||
+            syncedLines.map((l) => l.text).join("\n"),
+          syncedLines,
+          source: "LRCLIB",
+        };
       }
     }
 
-    // 2. Try YouTube Music built-in lyrics if no synced lyrics were found
-    if (payload.uri) {
-      try {
-        const parsed = new URL(payload.uri);
-        const videoId = parsed.searchParams.get("v");
-        if (videoId) {
-          const yt = await this.getClient();
-          const shelf = await yt.music.getLyrics(videoId);
-          const text = shelf?.description?.text?.trim();
-          if (text) {
-            return { lyrics: text, source: "YouTube Music" };
-          }
-        }
-      } catch {
-        // Ignore and use plainFallback
-      }
+    if (ytRes.status === "fulfilled" && ytRes.value) {
+      return { lyrics: ytRes.value, source: "YouTube Music" };
     }
 
-    return plainFallback;
+    const plainMatch = lrcItems.find((item) => item.plainLyrics?.trim());
+    if (plainMatch?.plainLyrics) {
+      return {
+        lyrics: plainMatch.plainLyrics.trim(),
+        source: "LRCLIB",
+      };
+    }
+
+    return null;
   }
 }

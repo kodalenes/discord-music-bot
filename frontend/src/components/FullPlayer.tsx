@@ -141,6 +141,7 @@ export function FullPlayer({
 
   const [lyricsData, setLyricsData] = useState<LyricsResult | null>(null);
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
+  const lyricsCacheRef = useRef<Map<string, LyricsResult | null>>(new Map());
   const lyricsTrackKeyRef = useRef<string>("");
 
   const [selectedPlaylist, setSelectedPlaylist] =
@@ -167,10 +168,23 @@ export function FullPlayer({
     };
   }, [currentTrack?.thumbnail]);
 
-  // Fetch lyrics when Lyrics tab is active or track changes
+  // Pre-fetch and cache lyrics whenever currentTrack changes (never re-fetches on tab switch)
   useEffect(() => {
-    if (!isOpen || rightTab !== "lyrics" || !currentTrack) return;
+    if (!currentTrack) {
+      lyricsTrackKeyRef.current = "";
+      setLyricsData(null);
+      setIsLoadingLyrics(false);
+      return;
+    }
+
     const key = `${currentTrack.id}|${currentTrack.title}`;
+    if (lyricsCacheRef.current.has(key)) {
+      lyricsTrackKeyRef.current = key;
+      setLyricsData(lyricsCacheRef.current.get(key) ?? null);
+      setIsLoadingLyrics(false);
+      return;
+    }
+
     if (key === lyricsTrackKeyRef.current) return;
 
     let cancelled = false;
@@ -182,7 +196,7 @@ export function FullPlayer({
       if (!cancelled) {
         setIsLoadingLyrics(false);
       }
-    }, 10000);
+    }, 6000);
 
     void onGetLyrics({
       uri: currentTrack.uri,
@@ -190,6 +204,7 @@ export function FullPlayer({
       artist: currentTrack.artist,
     })
       .then((res) => {
+        lyricsCacheRef.current.set(key, res);
         if (!cancelled) {
           setLyricsData(res);
           setIsLoadingLyrics(false);
@@ -209,7 +224,7 @@ export function FullPlayer({
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [isOpen, rightTab, currentTrack, onGetLyrics]);
+  }, [currentTrack, onGetLyrics]);
 
   // Close on Escape key
   useEffect(() => {
