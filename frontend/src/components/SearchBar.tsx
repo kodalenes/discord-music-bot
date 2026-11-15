@@ -230,7 +230,14 @@ export function SearchBar({
                         key={item.id}
                         className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors group"
                       >
-                        <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-neutral-800 shrink-0 shadow">
+                        <button
+                          onClick={() => {
+                            onPlayNow(item.uri);
+                            setIsOpen(false);
+                          }}
+                          className="relative w-11 h-11 rounded-lg overflow-hidden bg-neutral-800 shrink-0 shadow cursor-pointer group/thumb"
+                          title="Şimdi Çal"
+                        >
                           {item.thumbnail ? (
                             <img
                               src={item.thumbnail}
@@ -243,7 +250,10 @@ export function SearchBar({
                               <Search className="w-4 h-4" />
                             </div>
                           )}
-                        </div>
+                          <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                            <Play className="w-4 h-4 text-white fill-current" />
+                          </div>
+                        </button>
 
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-white truncate group-hover:text-red-400 transition-colors">

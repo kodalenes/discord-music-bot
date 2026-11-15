@@ -117,7 +117,7 @@ export default function App() {
             />
             <div>
               <span className="font-bold tracking-tight text-lg sm:text-xl text-white">
-                muzik
+                TARmusic
               </span>
               <span className="text-[10px] text-neutral-500 block -mt-1 font-mono">
                 ikarusgg.me
@@ -192,7 +192,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-7 pb-32 space-y-5">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-7 pb-44 sm:pb-36 space-y-5">
         {/* View Switcher Pills */}
         <div className="flex items-center gap-2">
           <button

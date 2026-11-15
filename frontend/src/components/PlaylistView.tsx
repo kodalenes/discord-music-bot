@@ -142,7 +142,11 @@ export function PlaylistView({
                 <span className="w-5 text-center text-xs text-neutral-500 font-mono">
                   {idx + 1}
                 </span>
-                <div className="w-10 h-10 rounded-lg overflow-hidden bg-neutral-800 shrink-0">
+                <button
+                  onClick={() => onPlayNow(track.uri)}
+                  className="relative w-10 h-10 rounded-lg overflow-hidden bg-neutral-800 shrink-0 cursor-pointer group/thumb"
+                  title="Şimdi Çal"
+                >
                   {track.thumbnail && (
                     <img
                       src={track.thumbnail}
@@ -151,7 +155,10 @@ export function PlaylistView({
                       loading="lazy"
                     />
                   )}
-                </div>
+                  <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                    <Play className="w-4 h-4 text-white fill-current" />
+                  </div>
+                </button>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-white truncate">
                     {track.title}
