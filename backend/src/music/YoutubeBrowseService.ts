@@ -297,7 +297,7 @@ export class YoutubeBrowseService {
 
     // Try YouTube Music playlist first (handles VL... and PL...)
     try {
-      const playlist = await yt.music.getPlaylist(id);
+      let playlist = await yt.music.getPlaylist(id);
       const header = playlist.header as unknown as
         | {
             title?: { text?: string };
@@ -311,6 +311,18 @@ export class YoutubeBrowseService {
         const parsed = toTrackResult(item);
         if (parsed) tracks.push(parsed);
       }
+
+      // Fetch remaining pages if playlist has > 100 tracks (cap at 10 pages / ~1000 tracks)
+      let pageCount = 1;
+      while (playlist.has_continuation && pageCount < 10) {
+        playlist = await playlist.getContinuation();
+        for (const item of playlist.contents ?? []) {
+          const parsed = toTrackResult(item);
+          if (parsed) tracks.push(parsed);
+        }
+        pageCount += 1;
+      }
+
       const thumbs = header?.thumbnail?.contents ?? header?.thumbnails ?? [];
       return {
         id,
@@ -326,30 +338,45 @@ export class YoutubeBrowseService {
       };
     } catch {
       // Fallback to standard YouTube playlist (handles regular PL... playlists)
-      const ytPlaylist = await yt.getPlaylist(id.replace(/^VL/, ""));
+      let ytPlaylist = await yt.getPlaylist(id.replace(/^VL/, ""));
+      const title = ytPlaylist.info?.title ?? "YouTube Listesi";
+      const author = ytPlaylist.info?.author?.name ?? "";
+      const initialThumb = ytPlaylist.info?.thumbnails?.[0]?.url ?? "";
+
       const tracks: SearchTrackResult[] = [];
-      for (const raw of ytPlaylist.items ?? []) {
-        const item = raw as unknown as RawItem;
-        const vid = item.id;
-        if (!vid) continue;
-        tracks.push({
-          id: vid,
-          title: textOf(item.title) || "Track",
-          artist:
-            typeof item.author === "string"
-              ? item.author
-              : (item.author?.name ?? "YouTube"),
-          duration: item.duration?.seconds ?? 0,
-          thumbnail: extractThumb(item),
-          uri: `https://www.youtube.com/watch?v=${vid}`,
-        });
+      const pushItems = (items: unknown[] | undefined) => {
+        for (const raw of items ?? []) {
+          const item = raw as unknown as RawItem;
+          const vid = item.id;
+          if (!vid) continue;
+          tracks.push({
+            id: vid,
+            title: textOf(item.title) || "Track",
+            artist:
+              typeof item.author === "string"
+                ? item.author
+                : (item.author?.name ?? "YouTube"),
+            duration: item.duration?.seconds ?? 0,
+            thumbnail: extractThumb(item),
+            uri: `https://www.youtube.com/watch?v=${vid}`,
+          });
+        }
+      };
+
+      pushItems(ytPlaylist.items);
+
+      let pageCount = 1;
+      while (ytPlaylist.has_continuation && pageCount < 10) {
+        ytPlaylist = await ytPlaylist.getContinuation();
+        pushItems(ytPlaylist.items);
+        pageCount += 1;
       }
+
       return {
         id,
-        title: ytPlaylist.info?.title ?? "YouTube Listesi",
-        author: ytPlaylist.info?.author?.name ?? "",
-        thumbnail:
-          ytPlaylist.info?.thumbnails?.[0]?.url ?? tracks[0]?.thumbnail ?? "",
+        title,
+        author,
+        thumbnail: initialThumb || tracks[0]?.thumbnail || "",
         isAlbum: false,
         tracks,
       };
