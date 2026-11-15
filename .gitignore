@@ -15,6 +15,7 @@ Thumbs.db
 
 # === Lavalink & local binaries ===
 *.log
+logs/
 plugins/
 infra/bin/
 backend/data/

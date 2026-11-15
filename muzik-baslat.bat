@@ -1,10 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title muzik.ikarusgg.me - Baslatiliyor...
+title TARmusic - Arka Planda Baslatiliyor...
 
 echo ===================================================
-echo    muzik.ikarusgg.me - Discord Muzik Hub (Yerel)
+echo    TARmusic - Discord Muzik Hub (Arka Plan Modu)
 echo ===================================================
 echo.
 
@@ -12,14 +12,12 @@ echo.
 if not exist ".env" (
     echo [HATA] .env dosyasi bulunamadi!
     echo Lutfen .env.example dosyasini .env olarak kopyalayin ve gerekli alanlari doldurun.
-    echo.
     pause
     exit /b 1
 )
 for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env") do (
     if not "%%A"=="" set "%%A=%%B"
 )
-echo [OK] .env dosyasi yuklendi.
 
 :: 2. Java kontrolu (PATH veya Eclipse Adoptium kurulum yolu)
 set "JAVA_EXE=java"
@@ -35,7 +33,6 @@ if %ERRORLEVEL% neq 0 (
     pause
     exit /b 1
 )
-echo [OK] Java hazir.
 
 :: 3. Yerel binary kontrolu
 if not exist "infra\bin\Lavalink.jar" (
@@ -49,37 +46,41 @@ if not exist "infra\bin\cloudflared.exe" (
     exit /b 1
 )
 
-:: 4. Lavalink baslat (160 MB RAM limiti + SerialGC ile arka planda)
-echo [INFO] Lavalink baslatiliyor ^(Port 2333, Optimize Bellek^)...
-start "muzik-lavalink" /min cmd /c "cd /d "%~dp0infra" && "%JAVA_EXE%" -Xmx160m -Xms64m -XX:+UseSerialGC -jar "%~dp0infra\bin\Lavalink.jar""
+:: 4. Log klasoru
+if not exist "logs" mkdir "logs"
 
-:: 5. Cloudflare Tunnel baslat (arka planda)
-echo [INFO] Cloudflare Tunnel baslatiliyor...
-start "muzik-cloudflared" /min cmd /c ""%~dp0infra\bin\cloudflared.exe" tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
-
-:: 6. Lavalink hazirlik beklemesi
-echo [INFO] Lavalink ses sunucusunun hazirlanmasi bekleniyor ^(6 saniye^)...
-timeout /t 6 /nobreak >nul
-echo [OK] Lavalink ve Cloudflare Tunnel arka planda aktif.
-
-:: 7. Backend sunucusunu baslatma
-echo.
-echo ===================================================
-echo    Backend Sunucusu Baslatiliyor ^(Port 3001^)...
-echo ===================================================
-echo.
-
-cd /d "%~dp0backend"
-if not exist "dist\index.js" (
+:: 5. Backend derli degilse derle
+if not exist "backend\dist\index.js" (
     echo [INFO] Backend derleniyor...
-    call npm run build
-)
-if exist "dist\index.js" (
-    call node dist/index.js
-) else (
-    call npm run dev
+    pushd "%~dp0backend"
+    call pnpm run build
+    popd
 )
 
+:: 6. Onceki acik surecler varsa temizle (cift baslatmayi onlemek icin)
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3001" ^| findstr "LISTENING"') do taskkill /f /pid %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":2333" ^| findstr "LISTENING"') do taskkill /f /pid %%a >nul 2>&1
+taskkill /f /im cloudflared.exe >nul 2>&1
+
+:: 7. Lavalink baslat (tamamen gizli arka plan)
+echo [1/3] Lavalink baslatiliyor ^(Port 2333^)...
+powershell -NoProfile -Command "Start-Process -FilePath '%JAVA_EXE%' -ArgumentList '-Xmx160m','-Xms64m','-XX:+UseSerialGC','-jar','%~dp0infra\bin\Lavalink.jar' -WorkingDirectory '%~dp0infra' -WindowStyle Hidden -RedirectStandardOutput '%~dp0logs\lavalink.log' -RedirectStandardError '%~dp0logs\lavalink.err.log'"
+
+:: 8. Cloudflare Tunnel baslat (tamamen gizli arka plan)
+echo [2/3] Cloudflare Tunnel baslatiliyor...
+powershell -NoProfile -Command "Start-Process -FilePath '%~dp0infra\bin\cloudflared.exe' -ArgumentList 'tunnel','--no-autoupdate','run','--token','%CLOUDFLARE_TUNNEL_TOKEN%' -WorkingDirectory '%~dp0infra' -WindowStyle Hidden -RedirectStandardOutput '%~dp0logs\cloudflared.log' -RedirectStandardError '%~dp0logs\cloudflared.err.log'"
+
+:: 9. Lavalink hazirlik beklemesi
+echo [INFO] Ses sunucusu hazirlaniyor ^(6 saniye^)...
+timeout /t 6 /nobreak >nul
+
+:: 10. Backend sunucusunu baslat (tamamen gizli arka plan)
+echo [3/3] Backend baslatiliyor ^(Port 3001^)...
+powershell -NoProfile -Command "Start-Process -FilePath 'node' -ArgumentList 'dist/index.js' -WorkingDirectory '%~dp0backend' -WindowStyle Hidden -RedirectStandardOutput '%~dp0logs\backend.log' -RedirectStandardError '%~dp0logs\backend.err.log'"
+
 echo.
-echo [UYARI] Backend sunucusu durdu ^(Cikis kodu: %ERRORLEVEL%^).
-pause
+echo [OK] Tum servisler arka planda calisiyor! Bu pencere kapanacak.
+echo Durdurmak icin: muzik-durdur.bat
+echo Loglar: logs\ klasoru
+timeout /t 2 /nobreak >nul
+exit /b 0
