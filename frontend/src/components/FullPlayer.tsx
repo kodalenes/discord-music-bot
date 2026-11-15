@@ -439,8 +439,8 @@ export function FullPlayer({
             </div>
 
             {/* Playback & Volume Controls */}
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col items-center gap-3 pt-1">
+              <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={onShuffle}
                   disabled={queue.length < 2}
