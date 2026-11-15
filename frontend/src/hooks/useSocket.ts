@@ -208,8 +208,20 @@ export function useSocket(pin: string | null, nickname: string) {
 
   const getExploreFeed = useCallback((): Promise<ExploreFeed> => {
     return new Promise((resolve) => {
+      let settled = false;
+      const timer = window.setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve({ trendingTracks: [], playlists: [] });
+        }
+      }, 8000);
+
       socket.emit("browse:explore", (feed) => {
-        resolve(feed || { trendingTracks: [], playlists: [] });
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(feed || { trendingTracks: [], playlists: [] });
+        }
       });
     });
   }, []);
