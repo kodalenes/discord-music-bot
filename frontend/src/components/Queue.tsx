@@ -1,4 +1,4 @@
-import { Trash2, ChevronUp, ChevronDown, Disc3, Music, Radio } from "lucide-react";
+import { Trash2, ChevronUp, ChevronDown, Disc3, Music, Radio, Play } from "lucide-react";
 import type { Track } from "../types";
 import { formatDuration } from "../utils";
 
@@ -8,6 +8,7 @@ interface QueueProps {
   isPlaying: boolean;
   onRemoveTrack: (trackId: string) => void;
   onMoveTrack: (trackId: string, direction: "up" | "down") => void;
+  onPlayNow: (trackId: string) => void;
 }
 
 export function Queue({
@@ -16,6 +17,7 @@ export function Queue({
   isPlaying,
   onRemoveTrack,
   onMoveTrack,
+  onPlayNow,
 }: QueueProps) {
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
@@ -138,8 +140,12 @@ export function Queue({
                     {index + 1}
                   </span>
 
-                  {/* Thumbnail */}
-                  <div className="relative w-11 h-11 rounded-lg overflow-hidden bg-neutral-800 shrink-0 border border-white/5">
+                  {/* Thumbnail + Play Now */}
+                  <button
+                    onClick={() => onPlayNow(track.id)}
+                    className="relative w-11 h-11 rounded-lg overflow-hidden bg-neutral-800 shrink-0 border border-white/5 cursor-pointer group/thumb"
+                    title="Şimdi Çal"
+                  >
                     {track.thumbnail ? (
                       <img
                         src={track.thumbnail}
@@ -152,17 +158,24 @@ export function Queue({
                         <Music className="w-4 h-4" />
                       </div>
                     )}
-                  </div>
+                    <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                      <Play className="w-4 h-4 text-white fill-current" />
+                    </div>
+                  </button>
 
                   {/* Title & Artist */}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-white truncate group-hover:text-neutral-100">
+                  <button
+                    onClick={() => onPlayNow(track.id)}
+                    className="min-w-0 flex-1 text-left cursor-pointer"
+                    title="Şimdi Çal"
+                  >
+                    <p className="text-sm font-medium text-white truncate group-hover:text-red-400 transition-colors">
                       {track.title}
                     </p>
                     <p className="text-xs text-neutral-400 truncate mt-0.5">
                       {track.artist}
                     </p>
-                  </div>
+                  </button>
 
                   {/* Duration */}
                   <span className="text-xs text-neutral-500 shrink-0 font-mono">
@@ -171,6 +184,13 @@ export function Queue({
 
                   {/* Action Buttons */}
                   <div className="flex items-center gap-1 shrink-0 opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => onPlayNow(track.id)}
+                      className="p-1.5 rounded-lg text-red-400 hover:text-white hover:bg-red-600 transition-colors cursor-pointer"
+                      title="Şimdi Çal"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                    </button>
                     <button
                       onClick={() => onMoveTrack(track.id, "up")}
                       disabled={isFirst}

@@ -9,6 +9,7 @@ services:
       - "2333:2333"
     environment:
       - LAVALINK_PASSWORD=${LAVALINK_PASSWORD:-youshallnotpass}
+      - YOUTUBE_OAUTH_REFRESH_TOKEN=${YOUTUBE_OAUTH_REFRESH_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "curl -sf -H \"Authorization: $$LAVALINK_PASSWORD\" http://localhost:2333/version || exit 1"]
       interval: 10s

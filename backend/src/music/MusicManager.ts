@@ -205,6 +205,19 @@ export class MusicManager {
         return null;
       }
 
+      const me = guild.members.me ?? (await guild.members.fetchMe());
+      const perms = channel.permissionsFor(me);
+      if (!perms.has(["ViewChannel", "Connect", "Speak"])) {
+        console.error(
+          `[Voice] Missing permissions in "${channel.name}" (${channel.id}). Required: ViewChannel, Connect, Speak.`
+        );
+        return null;
+      }
+
+      console.log(
+        `[Voice] Connecting to "${channel.name}" (${channel.id}) in "${guild.name}"...`
+      );
+
       const player = await this.shoukaku.joinVoiceChannel({
         guildId: guild.id,
         channelId: channel.id,
@@ -392,6 +405,67 @@ export class MusicManager {
     } else {
       this.emitState();
     }
+  }
+
+  public async addTracks(uris: string[], requester = "Web"): Promise<void> {
+    const cleanUris = uris.map((u) => u.trim()).filter(Boolean);
+    if (cleanUris.length === 0) return;
+
+    const first = cleanUris[0];
+    if (first) {
+      await this.addTrack(first, requester);
+    }
+
+    // Resolve remaining tracks sequentially without blocking initial playback
+    for (const uri of cleanUris.slice(1)) {
+      try {
+        await this.addTrack(uri, requester);
+      } catch (err) {
+        console.warn("[Queue] Skipped track during batch add:", uri, err);
+      }
+    }
+  }
+
+  public async playNow(payload: {
+    trackId?: string;
+    uri?: string;
+  }): Promise<void> {
+    let target: QueueTrack | null = null;
+
+    if (payload.trackId) {
+      const idx = this.queue.findIndex((t) => t.id === payload.trackId);
+      if (idx === -1) return;
+      const [removed] = this.queue.splice(idx, 1);
+      target = removed ?? null;
+    } else if (payload.uri) {
+      const node = this.getNode();
+      const res = await node.rest.resolve(payload.uri.trim());
+      if (res && res.loadType === LoadType.TRACK) {
+        target = this.toQueueTrack(res.data, "Web");
+      } else if (
+        res &&
+        res.loadType === LoadType.SEARCH &&
+        res.data[0]
+      ) {
+        target = this.toQueueTrack(res.data[0], "Web");
+      }
+    }
+
+    if (!target) return;
+
+    const player = await this.ensureVoiceConnection();
+    if (!player) {
+      this.queue.unshift(target);
+      this.emitState();
+      return;
+    }
+
+    this.currentTrack = target;
+    this.paused = false;
+    this.pausedPositionMs = 0;
+    this.trackStartTimestamp = Date.now();
+    await player.playTrack({ track: { encoded: target.encoded } });
+    this.emitState();
   }
 
   private async playNext(): Promise<void> {

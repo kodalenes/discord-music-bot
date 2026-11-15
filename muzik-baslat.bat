@@ -1,71 +1,85 @@
 @echo off
 setlocal enabledelayedexpansion
+cd /d "%~dp0"
 title muzik.ikarusgg.me - Baslatiliyor...
 
 echo ===================================================
-echo    muzik.ikarusgg.me - Discord Muzik Hub
+echo    muzik.ikarusgg.me - Discord Muzik Hub (Yerel)
 echo ===================================================
 echo.
 
-:: 1. .env kontrolu
+:: 1. .env kontrolu ve yuklenmesi
 if not exist ".env" (
     echo [HATA] .env dosyasi bulunamadi!
-    echo Lutfen .env.example dosyasini .env olarak kopyalayin ve gerekli alanlari doldurun:
-    echo   copy .env.example .env
+    echo Lutfen .env.example dosyasini .env olarak kopyalayin ve gerekli alanlari doldurun.
     echo.
     pause
     exit /b 1
 )
-echo [OK] .env dosyasi bulundu.
+for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env") do (
+    if not "%%A"=="" set "%%A=%%B"
+)
+echo [OK] .env dosyasi yuklendi.
 
-:: 2. Docker daemon kontrolu
-echo [INFO] Docker servisinin durumu kontrol ediliyor...
-docker info >nul 2>&1
+:: 2. Java kontrolu (PATH veya Eclipse Adoptium kurulum yolu)
+set "JAVA_EXE=java"
+where java >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [HATA] Docker calismiyor!
-    echo Lutfen Docker Desktop uygulamasini baslatin ve tekrar deneyin.
-    echo.
+    for /d %%D in ("C:\Program Files\Eclipse Adoptium\jre-*") do (
+        if exist "%%D\bin\java.exe" set "JAVA_EXE=%%D\bin\java.exe"
+    )
+)
+"%JAVA_EXE%" -version >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [HATA] Java bulunamadi! Lutfen Java 21 JRE kurun.
     pause
     exit /b 1
 )
-echo [OK] Docker servisi aktif.
+echo [OK] Java hazir.
 
-:: 3. Docker Compose ile Lavalink ve Cloudflare Tunnel baslatma
-echo.
-echo [INFO] Lavalink ve Cloudflare Tunnel konteynerleri baslatiliyor...
-docker compose -f infra/docker-compose.yml --env-file .env up -d
-if %ERRORLEVEL% neq 0 (
-    echo [HATA] Docker konteynerleri baslatilamadi!
+:: 3. Yerel binary kontrolu
+if not exist "infra\bin\Lavalink.jar" (
+    echo [HATA] infra\bin\Lavalink.jar bulunamadi!
+    pause
+    exit /b 1
+)
+if not exist "infra\bin\cloudflared.exe" (
+    echo [HATA] infra\bin\cloudflared.exe bulunamadi!
     pause
     exit /b 1
 )
 
-:: 4. Lavalink baslangic beklemesi (6 saniye)
-echo [INFO] Lavalink ses sunucusunun baslamasi bekleniyor (6 saniye)...
+:: 4. Lavalink baslat (160 MB RAM limiti + SerialGC ile arka planda)
+echo [INFO] Lavalink baslatiliyor ^(Port 2333, Optimize Bellek^)...
+start "muzik-lavalink" /min cmd /c "cd /d "%~dp0infra" && "%JAVA_EXE%" -Xmx160m -Xms64m -XX:+UseSerialGC -jar "%~dp0infra\bin\Lavalink.jar""
+
+:: 5. Cloudflare Tunnel baslat (arka planda)
+echo [INFO] Cloudflare Tunnel baslatiliyor...
+start "muzik-cloudflared" /min cmd /c ""%~dp0infra\bin\cloudflared.exe" tunnel --no-autoupdate run --token %CLOUDFLARE_TUNNEL_TOKEN%"
+
+:: 6. Lavalink hazirlik beklemesi
+echo [INFO] Lavalink ses sunucusunun hazirlanmasi bekleniyor ^(6 saniye^)...
 timeout /t 6 /nobreak >nul
-echo [OK] Lavalink hazir.
+echo [OK] Lavalink ve Cloudflare Tunnel arka planda aktif.
 
-:: 5. Backend sunucusunu baslatma
+:: 7. Backend sunucusunu baslatma
 echo.
 echo ===================================================
-echo    Backend Sunucusu Baslatiliyor (Port 3001)...
+echo    Backend Sunucusu Baslatiliyor ^(Port 3001^)...
 echo ===================================================
 echo.
 
-if not exist "backend\package.json" (
-    echo [BILGI] backend/ dizini henuz hazir degil.
-    echo Lavalink (2333) ve Cloudflare Tunnel arka planda calisiyor.
-    echo Backend kodu eklendiginde bu pencereden otomatik calisacaktir.
-    echo.
-    pause
-    exit /b 0
+cd /d "%~dp0backend"
+if not exist "dist\index.js" (
+    echo [INFO] Backend derleniyor...
+    call npm run build
 )
-
-cd backend
-if exist "pnpm-lock.yaml" (
-    pnpm dev
-) else if exist "package-lock.json" (
-    npm run dev
+if exist "dist\index.js" (
+    call node dist/index.js
 ) else (
-    pnpm dev
+    call npm run dev
 )
+
+echo.
+echo [UYARI] Backend sunucusu durdu ^(Cikis kodu: %ERRORLEVEL%^).
+pause

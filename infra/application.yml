@@ -9,14 +9,20 @@ plugins:
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
     clients:
-      - ANDROID_VR
-      - WEB
       - MUSIC
+      - TV
+      - TVHTML5_SIMPLY
+      - IOS
+      - ANDROID_MUSIC
+      - ANDROID_VR
+      - MWEB
+      - WEBEMBEDDED
+      - WEB
     # OAuth2 — on first boot Lavalink prints a device-code URL in the console.
-    # Sign in with a burner Google account, then paste the refresh token below.
+    # Sign in with a burner Google account, then set YOUTUBE_OAUTH_REFRESH_TOKEN in .env.
     oauth:
       enabled: true
-      # refreshToken: ""
+      refreshToken: "${YOUTUBE_OAUTH_REFRESH_TOKEN:}"
       skipInitialization: false
 
 lavalink:
@@ -36,9 +42,9 @@ lavalink:
     youtubeSearchEnabled: true
     soundcloudSearchEnabled: true
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
-      snapshot: false
-      repository: "https://maven.lavalink.dev/releases"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:e41dd95f8bd134b51e75080fb28cc805fecb431a"
+      snapshot: true
+      repository: "https://maven.lavalink.dev/snapshots"
 
 logging:
   file:

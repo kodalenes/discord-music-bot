@@ -1,6 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { socket } from "../socket";
-import type { PlayerState, SearchResult } from "../types";
+import type {
+  ArtistProfile,
+  BrowseSearchResult,
+  PlayerState,
+  PlaylistDetails,
+  SavedPlaylist,
+  SearchResult,
+} from "../types";
 
 const INITIAL_PLAYER_STATE: PlayerState = {
   currentTrack: null,
@@ -13,6 +20,7 @@ const INITIAL_PLAYER_STATE: PlayerState = {
 
 export function useSocket(pin: string | null) {
   const [playerState, setPlayerState] = useState<PlayerState>(INITIAL_PLAYER_STATE);
+  const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [lastError, setLastError] = useState<string | null>(null);
   const positionTimerRef = useRef<number | null>(null);
@@ -37,6 +45,9 @@ export function useSocket(pin: string | null) {
     const onConnect = () => {
       setIsConnected(true);
       setLastError(null);
+      socket.emit("playlists:list", (items) => {
+        if (Array.isArray(items)) setSavedPlaylists(items);
+      });
     };
 
     const onDisconnect = () => {
@@ -55,6 +66,10 @@ export function useSocket(pin: string | null) {
       }));
     };
 
+    const onPlaylistsUpdated = (items: SavedPlaylist[]) => {
+      setSavedPlaylists(items);
+    };
+
     const onError = (error: { message: string }) => {
       setLastError(error.message);
     };
@@ -63,6 +78,7 @@ export function useSocket(pin: string | null) {
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     socket.on("state:sync", onStateSync);
+    socket.on("playlists:updated", onPlaylistsUpdated);
     socket.on("error", onError);
 
     return () => {
@@ -70,6 +86,7 @@ export function useSocket(pin: string | null) {
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
       socket.off("state:sync", onStateSync);
+      socket.off("playlists:updated", onPlaylistsUpdated);
       socket.off("error", onError);
     };
   }, [pin]);
@@ -152,13 +169,96 @@ export function useSocket(pin: string | null) {
     socket.emit("player:volume", volume);
   }, []);
 
+  const browseSearch = useCallback(
+    (query: string): Promise<BrowseSearchResult> => {
+      return new Promise((resolve) => {
+        if (!query.trim()) {
+          resolve({ tracks: [], artists: [], playlists: [] });
+          return;
+        }
+        socket.emit("browse:search", query, (results) => {
+          resolve(results || { tracks: [], artists: [], playlists: [] });
+        });
+      });
+    },
+    []
+  );
+
+  const getArtistProfile = useCallback(
+    (artistId: string): Promise<ArtistProfile | null> => {
+      return new Promise((resolve) => {
+        socket.emit("browse:artist", artistId, (profile) => {
+          resolve(profile ?? null);
+        });
+      });
+    },
+    []
+  );
+
+  const getPlaylistDetails = useCallback(
+    (idOrUrl: string, isAlbum?: boolean): Promise<PlaylistDetails | null> => {
+      return new Promise((resolve) => {
+        socket.emit("browse:playlist", { idOrUrl, isAlbum }, (details) => {
+          resolve(details ?? null);
+        });
+      });
+    },
+    []
+  );
+
+  const addTracks = useCallback((uris: string[]): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (uris.length === 0) {
+        resolve(false);
+        return;
+      }
+      socket.emit("track:addMany", uris, (ack) => {
+        resolve(Boolean(ack?.ok));
+      });
+    });
+  }, []);
+
+  const playNow = useCallback(
+    (payload: { trackId?: string; uri?: string }): Promise<boolean> => {
+      return new Promise((resolve) => {
+        socket.emit("track:playNow", payload, (ack) => {
+          resolve(Boolean(ack?.ok));
+        });
+      });
+    },
+    []
+  );
+
+  const savePlaylist = useCallback(
+    (
+      urlOrId: string
+    ): Promise<{ ok: boolean; playlist?: SavedPlaylist; error?: string }> => {
+      return new Promise((resolve) => {
+        socket.emit("playlists:save", urlOrId, (res) => {
+          resolve(res);
+        });
+      });
+    },
+    []
+  );
+
+  const deletePlaylist = useCallback((id: string) => {
+    socket.emit("playlists:delete", id);
+  }, []);
+
   return {
     playerState,
+    savedPlaylists,
     isConnected,
     lastError,
     clearError: () => setLastError(null),
     search,
+    browseSearch,
+    getArtistProfile,
+    getPlaylistDetails,
     addTrack,
+    addTracks,
+    playNow,
     removeTrack,
     moveTrack,
     play,
@@ -166,5 +266,7 @@ export function useSocket(pin: string | null) {
     skip,
     seek,
     setVolume,
+    savePlaylist,
+    deletePlaylist,
   };
 }
