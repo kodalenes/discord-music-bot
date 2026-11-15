@@ -16,12 +16,14 @@ import {
 } from "shoukaku";
 import { config } from "../config.js";
 import type {
+  AudioFilterPreset,
   LoopMode,
   PlayerState,
   QueueTrack,
   ReorderPayload,
   SearchTrackResult,
 } from "../types.js";
+import { YoutubeBrowseService } from "./YoutubeBrowseService.js";
 
 const URL_REGEX = /^https?:\/\//i;
 
@@ -34,8 +36,12 @@ export class MusicManager {
   private queue: QueueTrack[] = [];
   private history: QueueTrack[] = [];
   private loopMode: LoopMode = "off";
+  private autoplay = false;
+  private audioFilter: AudioFilterPreset = "off";
+  private sessionPlayCount = 0;
   private paused = false;
   private volume = 80;
+  private readonly browseService = new YoutubeBrowseService();
   private trackStartTimestamp = 0;
   private pausedPositionMs = 0;
 
@@ -258,6 +264,7 @@ export class MusicManager {
       this.paused = false;
       this.trackStartTimestamp = Date.now();
       this.pausedPositionMs = 0;
+      this.sessionPlayCount += 1;
       this.emitState();
     });
 
@@ -513,7 +520,41 @@ export class MusicManager {
       }
     }
 
-    const next = this.queue.shift() ?? null;
+    let next = this.queue.shift() ?? null;
+
+    // Autoplay: when queue is empty and autoplay is enabled, find a genuinely similar track
+    if (!next && this.autoplay && finished) {
+      try {
+        const excludeIds = this.history
+          .map((t) => {
+            try {
+              return new URL(t.uri).searchParams.get("v") || "";
+            } catch {
+              return "";
+            }
+          })
+          .filter(Boolean);
+
+        const similar = await this.browseService.getSimilarTracks({
+          uri: finished.uri,
+          title: finished.title,
+          artist: finished.artist,
+          excludeIds,
+        });
+
+        const node = this.getNode();
+        for (const candidate of similar) {
+          const res = await node.rest.resolve(candidate.uri);
+          if (res && res.loadType === LoadType.TRACK) {
+            next = this.toQueueTrack(res.data, "Autoplay (Benzer)");
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn("[Autoplay] Failed to load similar track:", err);
+      }
+    }
+
     this.currentTrack = next;
     this.paused = false;
     this.pausedPositionMs = 0;
@@ -585,6 +626,60 @@ export class MusicManager {
     }
     this.emitState();
     return this.loopMode;
+  }
+
+  public setAutoplay(enabled?: boolean): boolean {
+    this.autoplay = enabled !== undefined ? enabled : !this.autoplay;
+    this.emitState();
+    return this.autoplay;
+  }
+
+  public async setAudioFilter(preset: AudioFilterPreset): Promise<void> {
+    this.audioFilter = preset;
+    if (this.player) {
+      switch (preset) {
+        case "bassboost":
+          await this.player.setFilters({
+            equalizer: [
+              { band: 0, gain: 0.25 },
+              { band: 1, gain: 0.2 },
+              { band: 2, gain: 0.14 },
+              { band: 3, gain: 0.08 },
+            ],
+          });
+          break;
+        case "nightcore":
+          await this.player.setFilters({
+            timescale: { speed: 1.18, pitch: 1.18, rate: 1.0 },
+          });
+          break;
+        case "vaporwave":
+          await this.player.setFilters({
+            timescale: { speed: 0.85, pitch: 0.82, rate: 1.0 },
+          });
+          break;
+        case "8d":
+          await this.player.setFilters({
+            rotation: { rotationHz: 0.2 },
+          });
+          break;
+        case "karaoke":
+          await this.player.setFilters({
+            karaoke: {
+              level: 1.0,
+              monoLevel: 1.0,
+              filterBand: 220.0,
+              filterWidth: 100.0,
+            },
+          });
+          break;
+        case "off":
+        default:
+          await this.player.setFilters({});
+          break;
+      }
+    }
+    this.emitState();
   }
 
   public removeTrack(trackId: string): void {
@@ -692,6 +787,9 @@ export class MusicManager {
       position: Math.floor(this.getCurrentPositionMs() / 1000),
       volume: this.volume,
       loopMode: this.loopMode,
+      autoplay: this.autoplay,
+      audioFilter: this.audioFilter,
+      sessionPlayCount: this.sessionPlayCount,
     };
   }
 

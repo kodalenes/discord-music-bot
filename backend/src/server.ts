@@ -244,6 +244,36 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       }
     });
 
+    socket.on("player:autoplay", (enabled, callback) => {
+      try {
+        const next = manager.setAutoplay(enabled);
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        emitActivity(
+          `${nick} otomatik devam modunu ${next ? "açtı" : "kapattı"}`
+        );
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to toggle autoplay.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
+    socket.on("player:filter", async (preset, callback) => {
+      try {
+        await manager.setAudioFilter(preset);
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        emitActivity(`${nick} ses efektini değiştirdi: ${preset}`);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to apply audio filter.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
     socket.on("player:seek", async (positionSeconds, callback) => {
       try {
         await manager.seek(positionSeconds);

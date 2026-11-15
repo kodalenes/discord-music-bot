@@ -3,6 +3,7 @@ import { socket } from "../socket";
 import type {
   ActivityNotice,
   ArtistProfile,
+  AudioFilterPreset,
   BrowseSearchResult,
   ConnectedUser,
   ExploreFeed,
@@ -23,6 +24,9 @@ const INITIAL_PLAYER_STATE: PlayerState = {
   position: 0,
   volume: 80,
   loopMode: "off",
+  autoplay: false,
+  audioFilter: "off",
+  sessionPlayCount: 0,
 };
 
 export function useSocket(pin: string | null, nickname: string) {
@@ -202,6 +206,14 @@ export function useSocket(pin: string | null, nickname: string) {
     socket.emit("player:loop", mode);
   }, []);
 
+  const toggleAutoplay = useCallback((enabled?: boolean) => {
+    socket.emit("player:autoplay", enabled);
+  }, []);
+
+  const setAudioFilter = useCallback((preset: AudioFilterPreset) => {
+    socket.emit("player:filter", preset);
+  }, []);
+
   const updateNickname = useCallback((nextNick: string) => {
     socket.emit("user:setNickname", nextNick);
   }, []);
@@ -353,6 +365,8 @@ export function useSocket(pin: string | null, nickname: string) {
     previous,
     shuffle,
     cycleLoop,
+    toggleAutoplay,
+    setAudioFilter,
     seek,
     setVolume,
     savePlaylist,

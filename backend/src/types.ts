@@ -80,6 +80,14 @@ export interface LyricsResult {
 
 export type LoopMode = "off" | "track" | "queue";
 
+export type AudioFilterPreset =
+  | "off"
+  | "bassboost"
+  | "nightcore"
+  | "vaporwave"
+  | "8d"
+  | "karaoke";
+
 export interface ConnectedUser {
   id: string;
   nickname: string;
@@ -105,6 +113,9 @@ export interface PlayerState {
   position: number; // seconds
   volume: number; // 0-100
   loopMode: LoopMode;
+  autoplay: boolean;
+  audioFilter: AudioFilterPreset;
+  sessionPlayCount: number;
 }
 
 export interface ReorderPayload {
@@ -147,6 +158,14 @@ export interface ClientToServerEvents {
   "player:shuffle": (callback?: (ack: ActionAck) => void) => void;
   "player:loop": (
     mode?: LoopMode,
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "player:autoplay": (
+    enabled?: boolean,
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "player:filter": (
+    preset: AudioFilterPreset,
     callback?: (ack: ActionAck) => void
   ) => void;
   "player:seek": (

@@ -75,6 +75,8 @@ export default function App() {
     previous,
     shuffle,
     cycleLoop,
+    toggleAutoplay,
+    setAudioFilter,
     seek,
     setVolume,
     savePlaylist,
@@ -510,6 +512,7 @@ export default function App() {
             currentTrack={playerState.currentTrack}
             queue={playerState.queue}
             history={playerState.history}
+            sessionPlayCount={playerState.sessionPlayCount}
             isPlaying={playerState.isPlaying}
             onRemoveTrack={removeTrack}
             onMoveTrack={moveTrack}
@@ -576,6 +579,8 @@ export default function App() {
         onPrevious={previous}
         onShuffle={shuffle}
         onCycleLoop={() => cycleLoop()}
+        onToggleAutoplay={() => toggleAutoplay()}
+        onSetAudioFilter={setAudioFilter}
         onSeek={seek}
         onSetVolume={setVolume}
         onExpand={() => navigateTo(view, true)}
@@ -599,6 +604,8 @@ export default function App() {
         onPrevious={previous}
         onShuffle={shuffle}
         onCycleLoop={() => cycleLoop()}
+        onToggleAutoplay={() => toggleAutoplay()}
+        onSetAudioFilter={setAudioFilter}
         onSeek={seek}
         onSetVolume={setVolume}
         onPlayNow={(trackId) => void playNow({ trackId })}

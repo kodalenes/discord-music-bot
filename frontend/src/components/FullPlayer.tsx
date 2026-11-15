@@ -21,13 +21,24 @@ import {
   Radio,
   ArrowLeft,
   Plus,
+  Infinity as InfinityIcon,
 } from "lucide-react";
 import type {
+  AudioFilterPreset,
   LyricsResult,
   PlayerState,
   PlaylistDetails,
   SavedPlaylist,
 } from "../types";
+
+const FILTER_PRESETS: { id: AudioFilterPreset; label: string }[] = [
+  { id: "off", label: "Normal" },
+  { id: "bassboost", label: "Bass Boost" },
+  { id: "nightcore", label: "Nightcore" },
+  { id: "vaporwave", label: "Vaporwave" },
+  { id: "8d", label: "8D" },
+  { id: "karaoke", label: "Karaoke" },
+];
 import { formatDuration } from "../utils";
 
 type RightTab = "queue" | "lyrics" | "playlists";
@@ -43,6 +54,8 @@ interface FullPlayerProps {
   onPrevious: () => void;
   onShuffle: () => void;
   onCycleLoop: () => void;
+  onToggleAutoplay: () => void;
+  onSetAudioFilter: (preset: AudioFilterPreset) => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onPlayNow: (trackId: string) => void;
@@ -130,6 +143,8 @@ export function FullPlayer({
   onPrevious,
   onShuffle,
   onCycleLoop,
+  onToggleAutoplay,
+  onSetAudioFilter,
   onSeek,
   onSetVolume,
   onPlayNow,
@@ -141,8 +156,17 @@ export function FullPlayer({
   onGetPlaylistDetails,
   onGetLyrics,
 }: FullPlayerProps) {
-  const { currentTrack, queue, history, isPlaying, position, volume, loopMode } =
-    playerState;
+  const {
+    currentTrack,
+    queue,
+    history,
+    isPlaying,
+    position,
+    volume,
+    loopMode,
+    autoplay,
+    audioFilter,
+  } = playerState;
   const [rightTab, setRightTab] = useState<RightTab>("queue");
   const [accentRgb, setAccentRgb] =
     useState<[number, number, number]>(DEFAULT_COLOR);
@@ -528,6 +552,36 @@ export function FullPlayer({
                   className="w-24 h-1 bg-white/25 rounded-lg appearance-none cursor-pointer accent-white"
                   title={`Ses: %${volume}`}
                 />
+              </div>
+
+              {/* Autoplay & Audio Filter Pills */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                <button
+                  onClick={onToggleAutoplay}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                    autoplay
+                      ? "bg-red-600 text-white shadow"
+                      : "bg-white/10 text-neutral-300 hover:bg-white/20"
+                  }`}
+                  title="Benzer şarkılarla otomatik devam"
+                >
+                  <InfinityIcon className="w-3.5 h-3.5" />
+                  <span>Radyo</span>
+                </button>
+
+                {FILTER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => onSetAudioFilter(preset.id)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                      audioFilter === preset.id
+                        ? "bg-white text-black"
+                        : "bg-white/10 text-neutral-300 hover:bg-white/20"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>

@@ -12,9 +12,20 @@ import {
   VolumeX,
   Disc3,
   ChevronUp,
+  Infinity as InfinityIcon,
+  SlidersHorizontal,
 } from "lucide-react";
-import type { PlayerState } from "../types";
+import type { AudioFilterPreset, PlayerState } from "../types";
 import { formatDuration } from "../utils";
+
+const FILTER_OPTIONS: { id: AudioFilterPreset; label: string }[] = [
+  { id: "off", label: "Normal" },
+  { id: "bassboost", label: "Bass Boost" },
+  { id: "nightcore", label: "Nightcore" },
+  { id: "vaporwave", label: "Vaporwave" },
+  { id: "8d", label: "8D Audio" },
+  { id: "karaoke", label: "Karaoke" },
+];
 
 interface PlayerBarProps {
   playerState: PlayerState;
@@ -24,6 +35,8 @@ interface PlayerBarProps {
   onPrevious: () => void;
   onShuffle: () => void;
   onCycleLoop: () => void;
+  onToggleAutoplay: () => void;
+  onSetAudioFilter: (preset: AudioFilterPreset) => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onExpand: () => void;
@@ -37,15 +50,27 @@ export function PlayerBar({
   onPrevious,
   onShuffle,
   onCycleLoop,
+  onToggleAutoplay,
+  onSetAudioFilter,
   onSeek,
   onSetVolume,
   onExpand,
 }: PlayerBarProps) {
-  const { currentTrack, isPlaying, position, volume, loopMode, history, queue } =
-    playerState;
+  const {
+    currentTrack,
+    isPlaying,
+    position,
+    volume,
+    loopMode,
+    autoplay,
+    audioFilter,
+    history,
+    queue,
+  } = playerState;
   const [previousVolume, setPreviousVolume] = useState(volume || 80);
   const [isSeeking, setIsSeeking] = useState(false);
   const [localSeekPos, setLocalSeekPos] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
 
   const duration = currentTrack?.duration || 0;
   const currentPos = isSeeking ? localSeekPos : position;
@@ -229,12 +254,68 @@ export function PlayerBar({
           </div>
         </div>
 
-        {/* Right: Volume & Time Controls */}
-        <div className="flex items-center justify-end gap-2 sm:gap-3 min-w-0">
+        {/* Right: Autoplay, Filter, Volume & Expand */}
+        <div className="flex items-center justify-end gap-1.5 sm:gap-2.5 min-w-0 relative">
           {/* Mobile time display */}
           <span className="text-[11px] font-mono text-neutral-400 sm:hidden">
             {formatDuration(currentPos)}
           </span>
+
+          {/* Autoplay Toggle */}
+          <button
+            onClick={onToggleAutoplay}
+            className={`hidden md:inline-flex p-1.5 rounded-lg transition-colors cursor-pointer ${
+              autoplay
+                ? "text-red-400 bg-red-500/15 hover:bg-red-500/25"
+                : "text-neutral-400 hover:text-white hover:bg-white/10"
+            }`}
+            title={
+              autoplay
+                ? "Otomatik Devam (Radyo): Açık"
+                : "Otomatik Devam (Radyo): Kapalı"
+            }
+          >
+            <InfinityIcon className="w-4 h-4" />
+          </button>
+
+          {/* Audio Filter Popover */}
+          <div className="relative hidden md:block">
+            <button
+              onClick={() => setShowFilters((prev) => !prev)}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                audioFilter !== "off"
+                  ? "text-red-400 bg-red-500/15 hover:bg-red-500/25"
+                  : "text-neutral-400 hover:text-white hover:bg-white/10"
+              }`}
+              title={`Ses Efekti: ${audioFilter}`}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+
+            {showFilters && (
+              <div className="absolute bottom-full right-0 mb-3 w-44 bg-[#161616] border border-white/10 rounded-2xl shadow-2xl p-2 z-50 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 px-2 py-1">
+                  Ses Efektleri (EQ)
+                </p>
+                {FILTER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      onSetAudioFilter(opt.id);
+                      setShowFilters(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                      audioFilter === opt.id
+                        ? "bg-red-600 text-white"
+                        : "text-neutral-300 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-2 group/volume">
             <button

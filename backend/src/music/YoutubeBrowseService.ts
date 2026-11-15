@@ -585,4 +585,65 @@ export class YoutubeBrowseService {
     this.exploreCache = { data, expiresAt: Date.now() + 10 * 60 * 1000 };
     return data;
   }
+
+  public async getSimilarTracks(payload: {
+    uri?: string;
+    title: string;
+    artist: string;
+    excludeIds?: string[];
+  }): Promise<SearchTrackResult[]> {
+    const yt = await this.getClient();
+    let seedVideoId: string | null = null;
+
+    if (payload.uri) {
+      try {
+        const parsed = new URL(payload.uri);
+        seedVideoId = parsed.searchParams.get("v");
+      } catch {
+        // Ignore invalid URL
+      }
+    }
+
+    if (!seedVideoId) {
+      const searchRes = await yt.music.search(
+        `${payload.title} ${payload.artist}`.trim(),
+        { type: "song" }
+      );
+      const first = searchRes.songs?.contents?.[0];
+      const parsedFirst = first ? toTrackResult(first) : null;
+      seedVideoId = parsedFirst?.id ?? null;
+    }
+
+    if (!seedVideoId) return [];
+
+    const excludeSet = new Set(payload.excludeIds ?? []);
+    excludeSet.add(seedVideoId);
+
+    const results: SearchTrackResult[] = [];
+    try {
+      const upNext = await yt.music.getUpNext(seedVideoId, true);
+      for (const item of upNext.contents ?? []) {
+        const track = toTrackResult(item);
+        if (!track || excludeSet.has(track.id)) continue;
+        excludeSet.add(track.id);
+        results.push(track);
+        if (results.length >= 5) break;
+      }
+    } catch {
+      // Fallback to artist top songs if getUpNext fails
+    }
+
+    if (results.length === 0 && payload.artist) {
+      const fallback = await yt.music.search(payload.artist, { type: "song" });
+      for (const item of fallback.songs?.contents ?? []) {
+        const track = toTrackResult(item);
+        if (!track || excludeSet.has(track.id)) continue;
+        excludeSet.add(track.id);
+        results.push(track);
+        if (results.length >= 5) break;
+      }
+    }
+
+    return results;
+  }
 }

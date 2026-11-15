@@ -9,14 +9,27 @@ import {
   Play,
   GripVertical,
   History,
+  Clock,
+  BarChart3,
 } from "lucide-react";
 import type { Track } from "../types";
 import { formatDuration } from "../utils";
+
+function formatTotalDuration(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "0 dk";
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  if (hours > 0) return `${hours} sa ${mins} dk`;
+  if (mins > 0) return `${mins} dk ${secs} sn`;
+  return `${secs} sn`;
+}
 
 interface QueueProps {
   currentTrack: Track | null;
   queue: Track[];
   history: Track[];
+  sessionPlayCount: number;
   isPlaying: boolean;
   onRemoveTrack: (trackId: string) => void;
   onMoveTrack: (trackId: string, direction: "up" | "down") => void;
@@ -28,6 +41,7 @@ export function Queue({
   currentTrack,
   queue,
   history,
+  sessionPlayCount,
   isPlaying,
   onRemoveTrack,
   onMoveTrack,
@@ -37,6 +51,26 @@ export function Queue({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+
+  const totalQueueSeconds = queue.reduce((sum, t) => sum + (t.duration || 0), 0);
+
+  const topRequester = (() => {
+    const counts = new Map<string, number>();
+    for (const t of [...(currentTrack ? [currentTrack] : []), ...queue, ...history]) {
+      const req = t.requester?.trim();
+      if (!req || req.startsWith("Autoplay")) continue;
+      counts.set(req, (counts.get(req) ?? 0) + 1);
+    }
+    let bestName = "";
+    let bestCount = 0;
+    for (const [name, count] of counts.entries()) {
+      if (count > bestCount) {
+        bestName = name;
+        bestCount = count;
+      }
+    }
+    return bestName ? `${bestName} (${bestCount})` : "—";
+  })();
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
@@ -153,9 +187,17 @@ export function Queue({
               </span>
             )}
           </div>
-          <span className="text-xs font-semibold px-2 py-0.5 bg-white/5 text-neutral-400 rounded-full border border-white/5">
-            {queue.length} parça
-          </span>
+          <div className="flex items-center gap-2">
+            {queue.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 bg-white/5 text-neutral-300 rounded-full border border-white/5">
+                <Clock className="w-3 h-3 text-red-400" />
+                {formatTotalDuration(totalQueueSeconds)}
+              </span>
+            )}
+            <span className="text-xs font-semibold px-2 py-0.5 bg-white/5 text-neutral-400 rounded-full border border-white/5">
+              {queue.length} parça
+            </span>
+          </div>
         </div>
 
         {queue.length === 0 ? (
@@ -296,6 +338,39 @@ export function Queue({
             })}
           </div>
         )}
+      </div>
+
+      {/* Mini Session Stats */}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="bg-[#121212] border border-white/5 rounded-2xl p-3.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-1">
+            <BarChart3 className="w-3.5 h-3.5 text-red-400" />
+            <span>Oturumda Çalınan</span>
+          </div>
+          <p className="text-base sm:text-lg font-bold text-white">
+            {sessionPlayCount} şarkı
+          </p>
+        </div>
+
+        <div className="bg-[#121212] border border-white/5 rounded-2xl p-3.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-1">
+            <Clock className="w-3.5 h-3.5 text-red-400" />
+            <span>Kuyruk Süresi</span>
+          </div>
+          <p className="text-base sm:text-lg font-bold text-white">
+            {formatTotalDuration(totalQueueSeconds)}
+          </p>
+        </div>
+
+        <div className="bg-[#121212] border border-white/5 rounded-2xl p-3.5">
+          <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-1">
+            <Music className="w-3.5 h-3.5 text-red-400" />
+            <span>En Aktif DJ</span>
+          </div>
+          <p className="text-sm sm:text-base font-bold text-white truncate">
+            {topRequester}
+          </p>
+        </div>
       </div>
 
       {/* Recently Played History Section */}
