@@ -3,6 +3,7 @@ import type {
   ArtistProfile,
   ArtistSearchResult,
   BrowseSearchResult,
+  ExploreFeed,
   LyricsResult,
   PlaylistDetails,
   PlaylistSearchResult,
@@ -144,6 +145,7 @@ export class YoutubeBrowseService {
   private ytPromise: Promise<Innertube> | null = null;
   private lyricsCache = new Map<string, LyricsResult | null>();
   private lyricsInFlight = new Map<string, Promise<LyricsResult | null>>();
+  private exploreCache: { data: ExploreFeed; expiresAt: number } | null = null;
 
   private getClient(): Promise<Innertube> {
     if (!this.ytPromise) {
@@ -515,5 +517,72 @@ export class YoutubeBrowseService {
     }
 
     return null;
+  }
+
+  public async getExploreFeed(): Promise<ExploreFeed> {
+    if (this.exploreCache && Date.now() < this.exploreCache.expiresAt) {
+      return this.exploreCache.data;
+    }
+
+    const yt = await this.getClient();
+    const trendingTracks: SearchTrackResult[] = [];
+    const playlists: PlaylistSearchResult[] = [];
+
+    try {
+      const explore = await yt.music.getExplore();
+      const sections = (explore.sections ?? []) as Array<{
+        contents?: unknown[];
+      }>;
+
+      for (const sec of sections) {
+        for (const item of sec.contents ?? []) {
+          const track = toTrackResult(item);
+          if (track && trendingTracks.length < 18) {
+            trendingTracks.push(track);
+            continue;
+          }
+          const pl = toPlaylistResult(item);
+          if (pl && playlists.length < 16) {
+            playlists.push(pl);
+          }
+        }
+      }
+    } catch {
+      // Fallback handled below
+    }
+
+    if (trendingTracks.length === 0 || playlists.length === 0) {
+      const [trendRes, moodRes] = await Promise.allSettled([
+        trendingTracks.length === 0
+          ? yt.music.search("Top Hits Turkey 2026", { type: "song" })
+          : Promise.resolve(null),
+        playlists.length === 0
+          ? yt.music.search("Chill Gaming Pop", { type: "playlist" })
+          : Promise.resolve(null),
+      ]);
+
+      if (trendRes.status === "fulfilled" && trendRes.value) {
+        const shelf = (trendRes.value as { songs?: { contents?: unknown[] } })
+          .songs?.contents;
+        for (const item of shelf ?? []) {
+          const t = toTrackResult(item);
+          if (t && trendingTracks.length < 18) trendingTracks.push(t);
+        }
+      }
+
+      if (moodRes.status === "fulfilled" && moodRes.value) {
+        const shelf = (
+          moodRes.value as { playlists?: { contents?: unknown[] } }
+        ).playlists?.contents;
+        for (const item of shelf ?? []) {
+          const p = toPlaylistResult(item);
+          if (p && playlists.length < 16) playlists.push(p);
+        }
+      }
+    }
+
+    const data: ExploreFeed = { trendingTracks, playlists };
+    this.exploreCache = { data, expiresAt: Date.now() + 10 * 60 * 1000 };
+    return data;
   }
 }

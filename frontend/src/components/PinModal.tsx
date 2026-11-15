@@ -1,13 +1,19 @@
 import { useState, type FormEvent } from "react";
-import { Lock, ArrowRight, AlertCircle } from "lucide-react";
+import { Lock, ArrowRight, AlertCircle, User } from "lucide-react";
 
 interface PinModalProps {
-  onSuccess: (pin: string) => void;
+  initialNickname?: string;
+  onSuccess: (pin: string, nickname: string) => void;
   error?: string | null;
 }
 
-export function PinModal({ onSuccess, error }: PinModalProps) {
+export function PinModal({
+  initialNickname = "",
+  onSuccess,
+  error,
+}: PinModalProps) {
   const [pin, setPin] = useState("");
+  const [nickname, setNickname] = useState(initialNickname);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -20,7 +26,7 @@ export function PinModal({ onSuccess, error }: PinModalProps) {
     }
     setSubmitting(true);
     setLocalError(null);
-    onSuccess(cleanPin);
+    onSuccess(cleanPin, nickname.trim() || "Misafir");
     setSubmitting(false);
   };
 
@@ -42,6 +48,25 @@ export function PinModal({ onSuccess, error }: PinModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+              Takma Adın (İsteğe Bağlı)
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-neutral-500">
+                <User className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                maxLength={24}
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="Örn: Ahmet"
+                className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white text-sm placeholder:text-neutral-600 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 transition-colors"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">
               Erişim PIN Kodu

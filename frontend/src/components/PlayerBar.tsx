@@ -3,6 +3,10 @@ import {
   Play,
   Pause,
   SkipForward,
+  SkipBack,
+  Shuffle,
+  Repeat,
+  Repeat1,
   Volume2,
   Volume1,
   VolumeX,
@@ -17,6 +21,9 @@ interface PlayerBarProps {
   onPlay: () => void;
   onPause: () => void;
   onSkip: () => void;
+  onPrevious: () => void;
+  onShuffle: () => void;
+  onCycleLoop: () => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onExpand: () => void;
@@ -27,11 +34,15 @@ export function PlayerBar({
   onPlay,
   onPause,
   onSkip,
+  onPrevious,
+  onShuffle,
+  onCycleLoop,
   onSeek,
   onSetVolume,
   onExpand,
 }: PlayerBarProps) {
-  const { currentTrack, isPlaying, position, volume } = playerState;
+  const { currentTrack, isPlaying, position, volume, loopMode, history, queue } =
+    playerState;
   const [previousVolume, setPreviousVolume] = useState(volume || 80);
   const [isSeeking, setIsSeeking] = useState(false);
   const [localSeekPos, setLocalSeekPos] = useState(0);
@@ -134,14 +145,34 @@ export function PlayerBar({
           onClick={(e) => e.stopPropagation()}
           className="flex flex-col items-center gap-1 shrink-0 cursor-default"
         >
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            {/* Shuffle */}
+            <button
+              onClick={onShuffle}
+              disabled={queue.length < 2}
+              className="hidden sm:inline-flex p-2 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
+              title="Kuyruğu Karıştır"
+            >
+              <Shuffle className="w-4 h-4" />
+            </button>
+
+            {/* Previous */}
+            <button
+              onClick={onPrevious}
+              disabled={history.length === 0}
+              className="p-2 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
+              title="Önceki Parça (Shift+P)"
+            >
+              <SkipBack className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
             {/* Play / Pause button */}
             {isPlaying ? (
               <button
                 onClick={onPause}
                 disabled={!currentTrack}
                 className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white text-black flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100 transition-all cursor-pointer"
-                title="Duraklat"
+                title="Duraklat (Space)"
               >
                 <Pause className="w-5 h-5 fill-black" />
               </button>
@@ -150,7 +181,7 @@ export function PlayerBar({
                 onClick={onPlay}
                 disabled={!currentTrack}
                 className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white text-black flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 disabled:opacity-40 disabled:hover:scale-100 transition-all cursor-pointer pl-0.5"
-                title="Oynat"
+                title="Oynat (Space)"
               >
                 <Play className="w-5 h-5 fill-black" />
               </button>
@@ -161,9 +192,32 @@ export function PlayerBar({
               onClick={onSkip}
               disabled={!currentTrack}
               className="p-2 sm:p-2.5 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-neutral-400 transition-all cursor-pointer"
-              title="Sonraki Parçaya Geç"
+              title="Sonraki Parça (Shift+N)"
             >
-              <SkipForward className="w-5 h-5" />
+              <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            {/* Loop */}
+            <button
+              onClick={onCycleLoop}
+              className={`hidden sm:inline-flex p-2 rounded-full transition-all cursor-pointer ${
+                loopMode !== "off"
+                  ? "text-red-400 bg-red-500/15 hover:bg-red-500/25"
+                  : "text-neutral-400 hover:text-white hover:bg-white/10"
+              }`}
+              title={
+                loopMode === "track"
+                  ? "Döngü: Tek Şarkı"
+                  : loopMode === "queue"
+                    ? "Döngü: Tüm Kuyruk"
+                    : "Döngü: Kapalı"
+              }
+            >
+              {loopMode === "track" ? (
+                <Repeat1 className="w-4 h-4" />
+              ) : (
+                <Repeat className="w-4 h-4" />
+              )}
             </button>
           </div>
 

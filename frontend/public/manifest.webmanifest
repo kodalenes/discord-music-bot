@@ -1,0 +1,17 @@
+{
+  "name": "TARmusic",
+  "short_name": "TARmusic",
+  "description": "Discord Müzik Hub — ikarusgg.me",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030303",
+  "theme_color": "#030303",
+  "icons": [
+    {
+      "src": "/Ikarus_Logo.webp",
+      "sizes": "512x512",
+      "type": "image/webp",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -8,13 +8,33 @@ export interface Track {
   requester?: string;
 }
 
+export type LoopMode = "off" | "track" | "queue";
+
+export interface ConnectedUser {
+  id: string;
+  nickname: string;
+}
+
+export interface ActivityNotice {
+  id: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface ExploreFeed {
+  trendingTracks: SearchResult[];
+  playlists: PlaylistSearchResult[];
+}
+
 export interface PlayerState {
   currentTrack: Track | null;
   queue: Track[];
+  history: Track[];
   paused?: boolean;
   isPlaying: boolean;
   position: number; // in seconds
   volume: number; // 0 to 100
+  loopMode: LoopMode;
 }
 
 export interface SearchResult {
@@ -112,7 +132,7 @@ export interface ClientToServerEvents {
     callback?: (ack: ActionAck) => void
   ) => void;
   "track:playNow": (
-    payload: { trackId?: string; uri?: string },
+    payload: { trackId?: string; uri?: string; requester?: string },
     callback?: (ack: ActionAck) => void
   ) => void;
   "track:remove": (trackId: string, callback?: (ack: ActionAck) => void) => void;
@@ -122,11 +142,19 @@ export interface ClientToServerEvents {
   ) => void;
   "player:togglePause": (callback?: (ack: ActionAck) => void) => void;
   "player:skip": (callback?: (ack: ActionAck) => void) => void;
+  "player:previous": (callback?: (ack: ActionAck) => void) => void;
+  "player:shuffle": (callback?: (ack: ActionAck) => void) => void;
+  "player:loop": (
+    mode?: LoopMode,
+    callback?: (ack: ActionAck) => void
+  ) => void;
   "player:seek": (
     positionSeconds: number,
     callback?: (ack: ActionAck) => void
   ) => void;
   "player:volume": (volume: number, callback?: (ack: ActionAck) => void) => void;
+  "user:setNickname": (nickname: string) => void;
+  "browse:explore": (callback: (feed: ExploreFeed) => void) => void;
   "browse:search": (
     query: string,
     callback: (results: BrowseSearchResult) => void
@@ -161,5 +189,7 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   "state:sync": (state: PlayerState) => void;
   "playlists:updated": (items: SavedPlaylist[]) => void;
+  "users:updated": (users: ConnectedUser[]) => void;
+  "activity:notice": (notice: ActivityNotice) => void;
   error: (error: { message: string }) => void;
 }

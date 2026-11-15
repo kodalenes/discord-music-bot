@@ -4,6 +4,10 @@ import {
   Play,
   Pause,
   SkipForward,
+  SkipBack,
+  Shuffle,
+  Repeat,
+  Repeat1,
   Volume2,
   Volume1,
   VolumeX,
@@ -36,6 +40,9 @@ interface FullPlayerProps {
   onPlay: () => void;
   onPause: () => void;
   onSkip: () => void;
+  onPrevious: () => void;
+  onShuffle: () => void;
+  onCycleLoop: () => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onPlayNow: (trackId: string) => void;
@@ -120,6 +127,9 @@ export function FullPlayer({
   onPlay,
   onPause,
   onSkip,
+  onPrevious,
+  onShuffle,
+  onCycleLoop,
   onSeek,
   onSetVolume,
   onPlayNow,
@@ -131,7 +141,8 @@ export function FullPlayer({
   onGetPlaylistDetails,
   onGetLyrics,
 }: FullPlayerProps) {
-  const { currentTrack, queue, isPlaying, position, volume } = playerState;
+  const { currentTrack, queue, history, isPlaying, position, volume, loopMode } =
+    playerState;
   const [rightTab, setRightTab] = useState<RightTab>("queue");
   const [accentRgb, setAccentRgb] =
     useState<[number, number, number]>(DEFAULT_COLOR);
@@ -429,7 +440,25 @@ export function FullPlayer({
 
             {/* Playback & Volume Controls */}
             <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onShuffle}
+                  disabled={queue.length < 2}
+                  className="p-2.5 rounded-full text-neutral-300 hover:text-white hover:bg-white/10 disabled:opacity-30 transition-all cursor-pointer"
+                  title="Kuyruğu Karıştır"
+                >
+                  <Shuffle className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={onPrevious}
+                  disabled={history.length === 0}
+                  className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-all cursor-pointer"
+                  title="Önceki Parça"
+                >
+                  <SkipBack className="w-5 h-5" />
+                </button>
+
                 {isPlaying ? (
                   <button
                     onClick={onPause}
@@ -453,10 +482,32 @@ export function FullPlayer({
                 <button
                   onClick={onSkip}
                   disabled={!currentTrack}
-                  className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-all cursor-pointer"
-                  title="Sonraki Parçaya Geç"
+                  className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-30 transition-all cursor-pointer"
+                  title="Sonraki Parça"
                 >
                   <SkipForward className="w-5 h-5" />
+                </button>
+
+                <button
+                  onClick={onCycleLoop}
+                  className={`p-2.5 rounded-full transition-all cursor-pointer ${
+                    loopMode !== "off"
+                      ? "bg-red-500/25 text-red-300 hover:bg-red-500/35"
+                      : "text-neutral-300 hover:text-white hover:bg-white/10"
+                  }`}
+                  title={
+                    loopMode === "track"
+                      ? "Döngü: Tek Şarkı"
+                      : loopMode === "queue"
+                        ? "Döngü: Tüm Kuyruk"
+                        : "Döngü: Kapalı"
+                  }
+                >
+                  {loopMode === "track" ? (
+                    <Repeat1 className="w-4 h-4" />
+                  ) : (
+                    <Repeat className="w-4 h-4" />
+                  )}
                 </button>
               </div>
 

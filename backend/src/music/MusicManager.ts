@@ -16,6 +16,7 @@ import {
 } from "shoukaku";
 import { config } from "../config.js";
 import type {
+  LoopMode,
   PlayerState,
   QueueTrack,
   ReorderPayload,
@@ -31,6 +32,8 @@ export class MusicManager {
 
   private currentTrack: QueueTrack | null = null;
   private queue: QueueTrack[] = [];
+  private history: QueueTrack[] = [];
+  private loopMode: LoopMode = "off";
   private paused = false;
   private volume = 80;
   private trackStartTimestamp = 0;
@@ -429,29 +432,42 @@ export class MusicManager {
   public async playNow(payload: {
     trackId?: string;
     uri?: string;
+    requester?: string;
   }): Promise<void> {
     let target: QueueTrack | null = null;
+    const requesterName = payload.requester?.trim() || "Web";
 
     if (payload.trackId) {
       const idx = this.queue.findIndex((t) => t.id === payload.trackId);
-      if (idx === -1) return;
-      const [removed] = this.queue.splice(idx, 1);
-      target = removed ?? null;
+      if (idx === -1) {
+        const histIdx = this.history.findIndex((t) => t.id === payload.trackId);
+        if (histIdx === -1) return;
+        const histTrack = this.history[histIdx];
+        if (!histTrack) return;
+        target = { ...histTrack, id: randomUUID(), requester: requesterName };
+      } else {
+        const [removed] = this.queue.splice(idx, 1);
+        target = removed ?? null;
+      }
     } else if (payload.uri) {
       const node = this.getNode();
       const res = await node.rest.resolve(payload.uri.trim());
       if (res && res.loadType === LoadType.TRACK) {
-        target = this.toQueueTrack(res.data, "Web");
+        target = this.toQueueTrack(res.data, requesterName);
       } else if (
         res &&
         res.loadType === LoadType.SEARCH &&
         res.data[0]
       ) {
-        target = this.toQueueTrack(res.data[0], "Web");
+        target = this.toQueueTrack(res.data[0], requesterName);
       }
     }
 
     if (!target) return;
+
+    if (this.currentTrack) {
+      this.pushHistory(this.currentTrack);
+    }
 
     const player = await this.ensureVoiceConnection();
     if (!player) {
@@ -468,7 +484,35 @@ export class MusicManager {
     this.emitState();
   }
 
+  private pushHistory(track: QueueTrack): void {
+    this.history.unshift(track);
+    if (this.history.length > 25) {
+      this.history.length = 25;
+    }
+  }
+
   private async playNext(): Promise<void> {
+    const finished = this.currentTrack;
+
+    if (finished && this.loopMode === "track") {
+      const player = await this.ensureVoiceConnection();
+      if (player) {
+        this.paused = false;
+        this.pausedPositionMs = 0;
+        this.trackStartTimestamp = Date.now();
+        await player.playTrack({ track: { encoded: finished.encoded } });
+        this.emitState();
+        return;
+      }
+    }
+
+    if (finished) {
+      this.pushHistory(finished);
+      if (this.loopMode === "queue") {
+        this.queue.push({ ...finished, id: randomUUID() });
+      }
+    }
+
     const next = this.queue.shift() ?? null;
     this.currentTrack = next;
     this.paused = false;
@@ -492,6 +536,55 @@ export class MusicManager {
     this.trackStartTimestamp = Date.now();
     await player.playTrack({ track: { encoded: next.encoded } });
     this.emitState();
+  }
+
+  public async previous(): Promise<void> {
+    const prevTrack = this.history.shift();
+    if (!prevTrack) return;
+
+    if (this.currentTrack) {
+      this.queue.unshift(this.currentTrack);
+    }
+
+    const player = await this.ensureVoiceConnection();
+    if (!player) {
+      this.queue.unshift(prevTrack);
+      this.emitState();
+      return;
+    }
+
+    this.currentTrack = prevTrack;
+    this.paused = false;
+    this.pausedPositionMs = 0;
+    this.trackStartTimestamp = Date.now();
+    await player.playTrack({ track: { encoded: prevTrack.encoded } });
+    this.emitState();
+  }
+
+  public shuffle(): void {
+    if (this.queue.length < 2) return;
+    for (let i = this.queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = this.queue[i];
+      const swap = this.queue[j];
+      if (temp && swap) {
+        this.queue[i] = swap;
+        this.queue[j] = temp;
+      }
+    }
+    this.emitState();
+  }
+
+  public setLoop(mode?: LoopMode): LoopMode {
+    if (mode) {
+      this.loopMode = mode;
+    } else {
+      const order: LoopMode[] = ["off", "queue", "track"];
+      const nextIdx = (order.indexOf(this.loopMode) + 1) % order.length;
+      this.loopMode = order[nextIdx] ?? "off";
+    }
+    this.emitState();
+    return this.loopMode;
   }
 
   public removeTrack(trackId: string): void {
@@ -593,10 +686,12 @@ export class MusicManager {
     return {
       currentTrack: this.currentTrack,
       queue: [...this.queue],
+      history: [...this.history],
       paused: this.paused,
       isPlaying: Boolean(this.currentTrack && !this.paused),
       position: Math.floor(this.getCurrentPositionMs() / 1000),
       volume: this.volume,
+      loopMode: this.loopMode,
     };
   }
 

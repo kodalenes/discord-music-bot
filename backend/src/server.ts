@@ -74,13 +74,46 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
     return next();
   });
 
+  const connectedUsers = new Map<string, string>();
+
+  const broadcastUsers = (): void => {
+    const users = Array.from(connectedUsers.entries()).map(
+      ([id, nickname]) => ({ id, nickname })
+    );
+    io.emit("users:updated", users);
+  };
+
+  const emitActivity = (message: string): void => {
+    io.emit("activity:notice", {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      message,
+      timestamp: Date.now(),
+    });
+  };
+
   io.on("connection", (socket: TypedSocket) => {
-    console.log(`[Socket.io] Client connected: ${socket.id}`);
+    const rawNick =
+      typeof socket.handshake.auth?.nickname === "string"
+        ? socket.handshake.auth.nickname
+        : typeof socket.handshake.query?.nickname === "string"
+          ? socket.handshake.query.nickname
+          : "";
+    const initialNick = rawNick.trim().slice(0, 24) || "Misafir";
+    connectedUsers.set(socket.id, initialNick);
+
+    console.log(`[Socket.io] Client connected: ${socket.id} (${initialNick})`);
     const manager = getMusicManager();
 
     // Send initial state immediately on connect
     socket.emit("state:sync", manager.getState());
     socket.emit("playlists:updated", playlistsStore.list());
+    broadcastUsers();
+
+    socket.on("user:setNickname", (nickname) => {
+      const clean = nickname.trim().slice(0, 24) || "Misafir";
+      connectedUsers.set(socket.id, clean);
+      broadcastUsers();
+    });
 
     socket.on("track:search", async (query, callback) => {
       try {
@@ -98,9 +131,11 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
     socket.on("track:add", async (payload, callback) => {
       try {
         const uri = typeof payload === "string" ? payload : payload.uri;
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
         const requester =
-          typeof payload === "string" ? "Web" : (payload.requester ?? "Web");
+          typeof payload === "string" ? nick : (payload.requester ?? nick);
         await manager.addTrack(uri, requester);
+        emitActivity(`${requester} kuyruğa bir şarkı ekledi`);
         callback?.({ ok: true });
       } catch (err) {
         const message =
@@ -149,11 +184,61 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
 
     socket.on("player:skip", async (callback) => {
       try {
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
         await manager.skip();
+        emitActivity(`${nick} şarkıyı geçti`);
         callback?.({ ok: true });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to skip track.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
+    socket.on("player:previous", async (callback) => {
+      try {
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        await manager.previous();
+        emitActivity(`${nick} önceki şarkıya döndü`);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to play previous track.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
+    socket.on("player:shuffle", (callback) => {
+      try {
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        manager.shuffle();
+        emitActivity(`${nick} kuyruğu karıştırdı`);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to shuffle queue.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
+    socket.on("player:loop", (mode, callback) => {
+      try {
+        const nextMode = manager.setLoop(mode);
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        const label =
+          nextMode === "track"
+            ? "Tek Şarkı"
+            : nextMode === "queue"
+              ? "Tüm Kuyruk"
+              : "Kapalı";
+        emitActivity(`${nick} döngü modunu değiştirdi: ${label}`);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to change loop mode.";
         socket.emit("error", { message });
         callback?.({ ok: false, error: message });
       }
@@ -185,7 +270,9 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
 
     socket.on("track:addMany", async (uris, callback) => {
       try {
-        await manager.addTracks(uris, "Web Dashboard");
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        await manager.addTracks(uris, nick);
+        emitActivity(`${nick} kuyruğa ${uris.length} şarkı ekledi`);
         callback?.({ ok: true });
       } catch (err) {
         const message =
@@ -197,7 +284,9 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
 
     socket.on("track:playNow", async (payload, callback) => {
       try {
-        await manager.playNow(payload);
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        await manager.playNow({ ...payload, requester: payload.requester ?? nick });
+        emitActivity(`${nick} yeni bir şarkı başlattı`);
         callback?.({ ok: true });
       } catch (err) {
         const message =
@@ -303,8 +392,23 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       }
     });
 
+    socket.on("browse:explore", async (callback) => {
+      try {
+        const feed = await browseService.getExploreFeed();
+        callback(feed);
+      } catch (err) {
+        console.error(
+          "[Socket.io] browse:explore error:",
+          err instanceof Error ? err.message : err
+        );
+        callback({ trendingTracks: [], playlists: [] });
+      }
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Socket.io] Client disconnected (${socket.id}): ${reason}`);
+      connectedUsers.delete(socket.id);
+      broadcastUsers();
     });
   });
 

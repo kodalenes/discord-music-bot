@@ -1,8 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { socket } from "../socket";
 import type {
+  ActivityNotice,
   ArtistProfile,
   BrowseSearchResult,
+  ConnectedUser,
+  ExploreFeed,
+  LoopMode,
   LyricsResult,
   PlayerState,
   PlaylistDetails,
@@ -13,15 +17,19 @@ import type {
 const INITIAL_PLAYER_STATE: PlayerState = {
   currentTrack: null,
   queue: [],
+  history: [],
   paused: false,
   isPlaying: false,
   position: 0,
   volume: 80,
+  loopMode: "off",
 };
 
-export function useSocket(pin: string | null) {
+export function useSocket(pin: string | null, nickname: string) {
   const [playerState, setPlayerState] = useState<PlayerState>(INITIAL_PLAYER_STATE);
   const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
+  const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
+  const [notices, setNotices] = useState<ActivityNotice[]>([]);
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [lastError, setLastError] = useState<string | null>(null);
   const positionTimerRef = useRef<number | null>(null);
@@ -35,9 +43,12 @@ export function useSocket(pin: string | null) {
       return;
     }
 
-    // Set handshake auth token/pin
-    socket.auth = { pin };
-    (socket.io.opts as { query?: Record<string, string> }).query = { pin };
+    // Set handshake auth token/pin + nickname
+    socket.auth = { pin, nickname };
+    (socket.io.opts as { query?: Record<string, string> }).query = {
+      pin,
+      nickname,
+    };
 
     if (!socket.connected) {
       socket.connect();
@@ -71,6 +82,17 @@ export function useSocket(pin: string | null) {
       setSavedPlaylists(items);
     };
 
+    const onUsersUpdated = (users: ConnectedUser[]) => {
+      setConnectedUsers(users);
+    };
+
+    const onActivityNotice = (notice: ActivityNotice) => {
+      setNotices((prev) => [...prev.slice(-3), notice]);
+      window.setTimeout(() => {
+        setNotices((prev) => prev.filter((n) => n.id !== notice.id));
+      }, 4000);
+    };
+
     const onError = (error: { message: string }) => {
       setLastError(error.message);
     };
@@ -80,6 +102,8 @@ export function useSocket(pin: string | null) {
     socket.on("connect_error", onConnectError);
     socket.on("state:sync", onStateSync);
     socket.on("playlists:updated", onPlaylistsUpdated);
+    socket.on("users:updated", onUsersUpdated);
+    socket.on("activity:notice", onActivityNotice);
     socket.on("error", onError);
 
     return () => {
@@ -88,9 +112,11 @@ export function useSocket(pin: string | null) {
       socket.off("connect_error", onConnectError);
       socket.off("state:sync", onStateSync);
       socket.off("playlists:updated", onPlaylistsUpdated);
+      socket.off("users:updated", onUsersUpdated);
+      socket.off("activity:notice", onActivityNotice);
       socket.off("error", onError);
     };
-  }, [pin]);
+  }, [pin, nickname]);
 
   // Position ticker when playing
   useEffect(() => {
@@ -146,6 +172,10 @@ export function useSocket(pin: string | null) {
     socket.emit("track:reorder", { trackId, direction });
   }, []);
 
+  const reorderTrack = useCallback((fromIndex: number, toIndex: number) => {
+    socket.emit("track:reorder", { fromIndex, toIndex });
+  }, []);
+
   const play = useCallback(() => {
     setPlayerState((prev) => ({ ...prev, isPlaying: true, paused: false }));
     socket.emit("player:togglePause");
@@ -158,6 +188,30 @@ export function useSocket(pin: string | null) {
 
   const skip = useCallback(() => {
     socket.emit("player:skip");
+  }, []);
+
+  const previous = useCallback(() => {
+    socket.emit("player:previous");
+  }, []);
+
+  const shuffle = useCallback(() => {
+    socket.emit("player:shuffle");
+  }, []);
+
+  const cycleLoop = useCallback((mode?: LoopMode) => {
+    socket.emit("player:loop", mode);
+  }, []);
+
+  const updateNickname = useCallback((nextNick: string) => {
+    socket.emit("user:setNickname", nextNick);
+  }, []);
+
+  const getExploreFeed = useCallback((): Promise<ExploreFeed> => {
+    return new Promise((resolve) => {
+      socket.emit("browse:explore", (feed) => {
+        resolve(feed || { trendingTracks: [], playlists: [] });
+      });
+    });
   }, []);
 
   const seek = useCallback((position: number) => {
@@ -265,6 +319,8 @@ export function useSocket(pin: string | null) {
   return {
     playerState,
     savedPlaylists,
+    connectedUsers,
+    notices,
     isConnected,
     lastError,
     clearError: () => setLastError(null),
@@ -272,18 +328,24 @@ export function useSocket(pin: string | null) {
     browseSearch,
     getArtistProfile,
     getPlaylistDetails,
+    getExploreFeed,
     addTrack,
     addTracks,
     playNow,
     removeTrack,
     moveTrack,
+    reorderTrack,
     play,
     pause,
     skip,
+    previous,
+    shuffle,
+    cycleLoop,
     seek,
     setVolume,
     savePlaylist,
     deletePlaylist,
     getLyrics,
+    updateNickname,
   };
 }

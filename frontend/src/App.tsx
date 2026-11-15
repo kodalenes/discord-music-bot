@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { Wifi, WifiOff, LogOut, ListMusic, Radio } from "lucide-react";
+import {
+  Wifi,
+  WifiOff,
+  LogOut,
+  ListMusic,
+  Radio,
+  Compass,
+  Users,
+} from "lucide-react";
 import { PinModal } from "./components/PinModal";
 import { SearchBar } from "./components/SearchBar";
 import { Queue } from "./components/Queue";
@@ -8,13 +16,16 @@ import { FullPlayer } from "./components/FullPlayer";
 import { ArtistView } from "./components/ArtistView";
 import { PlaylistView } from "./components/PlaylistView";
 import { SavedPlaylists } from "./components/SavedPlaylists";
+import { ExploreView } from "./components/ExploreView";
 import { useSocket } from "./hooks/useSocket";
-import type { ArtistProfile, PlaylistDetails } from "./types";
+import type { ArtistProfile, ExploreFeed, PlaylistDetails } from "./types";
 
 const PIN_STORAGE_KEY = "muzik_pin";
+const NICKNAME_STORAGE_KEY = "muzik_nickname";
 
 type ActiveView =
   | { kind: "queue" }
+  | { kind: "explore" }
   | { kind: "playlists" }
   | { kind: "artist"; artistId: string }
   | { kind: "playlist"; idOrUrl: string; isAlbum?: boolean };
@@ -22,6 +33,9 @@ type ActiveView =
 export default function App() {
   const [pin, setPin] = useState<string | null>(() => {
     return localStorage.getItem(PIN_STORAGE_KEY);
+  });
+  const [nickname, setNickname] = useState<string>(() => {
+    return localStorage.getItem(NICKNAME_STORAGE_KEY) || "Misafir";
   });
 
   const [view, setView] = useState<ActiveView>({ kind: "queue" });
@@ -32,31 +46,42 @@ export default function App() {
   const [playlistDetails, setPlaylistDetails] =
     useState<PlaylistDetails | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
+  const [exploreFeed, setExploreFeed] = useState<ExploreFeed | null>(null);
+  const [isLoadingExplore, setIsLoadingExplore] = useState(false);
   const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
+  const [showUsersMenu, setShowUsersMenu] = useState(false);
 
   const {
     playerState,
     savedPlaylists,
+    connectedUsers,
+    notices,
     isConnected,
     lastError,
     clearError,
     browseSearch,
     getArtistProfile,
     getPlaylistDetails,
+    getExploreFeed,
     addTrack,
     addTracks,
     playNow,
     removeTrack,
     moveTrack,
+    reorderTrack,
     play,
     pause,
     skip,
+    previous,
+    shuffle,
+    cycleLoop,
     seek,
     setVolume,
     savePlaylist,
     deletePlaylist,
     getLyrics,
-  } = useSocket(pin);
+    updateNickname,
+  } = useSocket(pin, nickname);
 
   useEffect(() => {
     if (pin) {
@@ -64,7 +89,14 @@ export default function App() {
     }
   }, [pin]);
 
-  const handleLogin = (enteredPin: string) => {
+  useEffect(() => {
+    if (nickname) {
+      localStorage.setItem(NICKNAME_STORAGE_KEY, nickname);
+    }
+  }, [nickname]);
+
+  const handleLogin = (enteredPin: string, enteredNickname: string) => {
+    setNickname(enteredNickname);
     setPin(enteredPin);
     clearError();
   };
@@ -86,14 +118,39 @@ export default function App() {
           ? "#player"
           : nextView.kind === "queue"
             ? "#queue"
-            : nextView.kind === "playlists"
-              ? "#playlists"
-              : nextView.kind === "artist"
-                ? `#artist/${nextView.artistId}`
-                : `#playlist/${nextView.idOrUrl}`
+            : nextView.kind === "explore"
+              ? "#explore"
+              : nextView.kind === "playlists"
+                ? "#playlists"
+                : nextView.kind === "artist"
+                  ? `#artist/${nextView.artistId}`
+                  : `#playlist/${nextView.idOrUrl}`
       );
     },
     []
+  );
+
+  const loadExplore = useCallback(
+    async (force = false) => {
+      if (!force && exploreFeed) return;
+      setIsLoadingExplore(true);
+      const feed = await getExploreFeed();
+      setExploreFeed(feed);
+      setIsLoadingExplore(false);
+    },
+    [exploreFeed, getExploreFeed]
+  );
+
+  const handleOpenExplore = useCallback(
+    (pushHistory = true) => {
+      if (pushHistory) {
+        navigateTo({ kind: "explore" }, false);
+      } else {
+        setView({ kind: "explore" });
+      }
+      void loadExplore(false);
+    },
+    [loadExplore, navigateTo]
   );
 
   const handleOpenArtist = useCallback(
@@ -156,6 +213,8 @@ export default function App() {
         void handleOpenArtist(target.artistId, false);
       } else if (target.kind === "playlist") {
         void handleOpenPlaylist(target.idOrUrl, target.isAlbum, false);
+      } else if (target.kind === "explore") {
+        handleOpenExplore(false);
       } else {
         setView(target);
       }
@@ -163,17 +222,117 @@ export default function App() {
 
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [handleOpenArtist, handleOpenPlaylist]);
+  }, [handleOpenArtist, handleOpenPlaylist, handleOpenExplore]);
+
+  // Global keyboard shortcuts (Space, Shift+N / Shift+ArrowRight, Shift+P / Shift+ArrowLeft)
+  useEffect(() => {
+    if (!pin) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (playerState.isPlaying) {
+          pause();
+        } else {
+          play();
+        }
+      } else if (
+        e.shiftKey &&
+        (e.key === "N" || e.key === "n" || e.key === "ArrowRight")
+      ) {
+        e.preventDefault();
+        skip();
+      } else if (
+        e.shiftKey &&
+        (e.key === "P" || e.key === "p" || e.key === "ArrowLeft")
+      ) {
+        e.preventDefault();
+        previous();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pin, playerState.isPlaying, play, pause, skip, previous]);
+
+  // Windows / OS Media Session API integration (Media Keys + Lock Screen / Taskbar overlay)
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+
+    const track = playerState.currentTrack;
+    if (track) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title,
+        artist: track.artist,
+        album: "TARmusic",
+        artwork: track.thumbnail
+          ? [{ src: track.thumbnail, sizes: "512x512", type: "image/jpeg" }]
+          : [{ src: "/Ikarus_Logo.webp", sizes: "512x512", type: "image/webp" }],
+      });
+      navigator.mediaSession.playbackState = playerState.isPlaying
+        ? "playing"
+        : "paused";
+    } else {
+      navigator.mediaSession.playbackState = "none";
+    }
+
+    navigator.mediaSession.setActionHandler("play", play);
+    navigator.mediaSession.setActionHandler("pause", pause);
+    navigator.mediaSession.setActionHandler("nexttrack", skip);
+    navigator.mediaSession.setActionHandler("previoustrack", previous);
+    navigator.mediaSession.setActionHandler("seekto", (details) => {
+      if (typeof details.seekTime === "number") {
+        seek(Math.floor(details.seekTime));
+      }
+    });
+  }, [
+    playerState.currentTrack,
+    playerState.isPlaying,
+    play,
+    pause,
+    skip,
+    previous,
+    seek,
+  ]);
 
   if (!pin) {
-    return <PinModal onSuccess={handleLogin} error={lastError} />;
+    return (
+      <PinModal
+        initialNickname={nickname === "Misafir" ? "" : nickname}
+        onSuccess={handleLogin}
+        error={lastError}
+      />
+    );
   }
 
   return (
     <div className="min-h-screen bg-[#030303] text-white flex flex-col selection:bg-red-500/30 selection:text-white">
+      {/* Live Activity Toast Notifications */}
+      {notices.length > 0 && (
+        <div className="fixed top-16 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-xs">
+          {notices.map((n) => (
+            <div
+              key={n.id}
+              className="px-3.5 py-2 rounded-xl bg-[#181818]/95 border border-white/10 shadow-xl text-xs text-neutral-200 backdrop-blur-md animate-fade-in"
+            >
+              {n.message}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-30 bg-[#030303]/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 sm:gap-4">
           {/* Logo */}
           <button
             onClick={() => navigateTo({ kind: "queue" }, false)}
@@ -195,7 +354,7 @@ export default function App() {
           </button>
 
           {/* Search bar in center */}
-          <div className="flex-1 max-w-xl mx-2 sm:mx-6">
+          <div className="flex-1 max-w-xl mx-1 sm:mx-6">
             <SearchBar
               onBrowseSearch={browseSearch}
               onAddTrack={addTrack}
@@ -207,8 +366,53 @@ export default function App() {
             />
           </div>
 
-          {/* Right status & Logout */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Right: Online Users + Status + Logout */}
+          <div className="flex items-center gap-2 shrink-0 relative">
+            <button
+              onClick={() => setShowUsersMenu((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-300 transition-colors cursor-pointer"
+              title="Bağlı Kullanıcılar"
+            >
+              <Users className="w-3.5 h-3.5 text-red-400" />
+              <span>{connectedUsers.length}</span>
+            </button>
+
+            {showUsersMenu && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-3.5 z-50 space-y-3">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-neutral-400 font-semibold mb-1">
+                    Takma Adın
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={24}
+                    value={nickname}
+                    onChange={(e) => {
+                      setNickname(e.target.value);
+                      updateNickname(e.target.value);
+                    }}
+                    className="w-full bg-[#202020] text-white text-xs px-3 py-2 rounded-xl border border-white/10 focus:border-red-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-neutral-400 font-semibold mb-1.5">
+                    Çevrimiçi ({connectedUsers.length})
+                  </p>
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    {connectedUsers.map((u) => (
+                      <div
+                        key={u.id}
+                        className="flex items-center gap-2 text-xs text-neutral-200 px-2 py-1 rounded-lg bg-white/[0.03]"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="truncate">{u.nickname}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
                 isConnected
@@ -263,7 +467,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-7 pb-44 sm:pb-36 space-y-5">
         {/* View Switcher Pills */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => navigateTo({ kind: "queue" }, false)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
@@ -274,6 +478,18 @@ export default function App() {
           >
             <Radio className="w-3.5 h-3.5" />
             Kuyruk ({playerState.queue.length})
+          </button>
+
+          <button
+            onClick={() => handleOpenExplore(true)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              view.kind === "explore"
+                ? "bg-white text-black shadow"
+                : "bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            Keşfet
           </button>
 
           <button
@@ -293,10 +509,25 @@ export default function App() {
           <Queue
             currentTrack={playerState.currentTrack}
             queue={playerState.queue}
+            history={playerState.history}
             isPlaying={playerState.isPlaying}
             onRemoveTrack={removeTrack}
             onMoveTrack={moveTrack}
+            onReorderTrack={reorderTrack}
             onPlayNow={(trackId) => void playNow({ trackId })}
+          />
+        )}
+
+        {view.kind === "explore" && (
+          <ExploreView
+            feed={exploreFeed}
+            isLoading={isLoadingExplore}
+            onRefresh={() => void loadExplore(true)}
+            onPlayNow={(uri) => void playNow({ uri })}
+            onAddTrack={(uri) => addTrack({ uri })}
+            onOpenPlaylist={(id, isAlbum) =>
+              void handleOpenPlaylist(id, isAlbum)
+            }
           />
         )}
 
@@ -342,6 +573,9 @@ export default function App() {
         onPlay={play}
         onPause={pause}
         onSkip={skip}
+        onPrevious={previous}
+        onShuffle={shuffle}
+        onCycleLoop={() => cycleLoop()}
         onSeek={seek}
         onSetVolume={setVolume}
         onExpand={() => navigateTo(view, true)}
@@ -362,6 +596,9 @@ export default function App() {
         onPlay={play}
         onPause={pause}
         onSkip={skip}
+        onPrevious={previous}
+        onShuffle={shuffle}
+        onCycleLoop={() => cycleLoop()}
         onSeek={seek}
         onSetVolume={setVolume}
         onPlayNow={(trackId) => void playNow({ trackId })}
