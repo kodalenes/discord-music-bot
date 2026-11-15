@@ -1,0 +1,50 @@
+server:
+  port: 2333
+  address: 0.0.0.0
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: true
+    allowDirectPlaylistIds: true
+    clients:
+      - ANDROID_VR
+      - WEB
+      - MUSIC
+    # OAuth2 — on first boot Lavalink prints a device-code URL in the console.
+    # Sign in with a burner Google account, then paste the refresh token below.
+    oauth:
+      enabled: true
+      # refreshToken: ""
+      skipInitialization: false
+
+lavalink:
+  server:
+    password: "${LAVALINK_PASSWORD:-youshallnotpass}"
+    sources:
+      youtube: false   # Disabled — handled by the youtube-plugin above
+      bandcamp: true
+      soundcloud: true
+      twitch: true
+      vimeo: true
+      http: true
+      local: false
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    playerUpdateInterval: 5
+    youtubeSearchEnabled: true
+    soundcloudSearchEnabled: true
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.2"
+      snapshot: false
+      repository: "https://maven.lavalink.dev/releases"
+
+logging:
+  file:
+    max-history: 7
+    max-size: 25MB
+  level:
+    root: INFO
+    lavalink: INFO
+    dev.lavalink.youtube: DEBUG
