@@ -3,6 +3,7 @@ import type {
   ArtistProfile,
   ArtistSearchResult,
   BrowseSearchResult,
+  LyricsResult,
   PlaylistDetails,
   PlaylistSearchResult,
   SearchTrackResult,
@@ -381,5 +382,74 @@ export class YoutubeBrowseService {
         tracks,
       };
     }
+  }
+
+  public async getLyrics(payload: {
+    uri?: string;
+    title: string;
+    artist: string;
+  }): Promise<LyricsResult | null> {
+    // 1. Try YouTube Music built-in lyrics if videoId is available
+    if (payload.uri) {
+      try {
+        const parsed = new URL(payload.uri);
+        const videoId = parsed.searchParams.get("v");
+        if (videoId) {
+          const yt = await this.getClient();
+          const shelf = await yt.music.getLyrics(videoId);
+          const text = shelf?.description?.text?.trim();
+          if (text) {
+            return { lyrics: text, source: "YouTube Music" };
+          }
+        }
+      } catch {
+        // Fallback to LRCLIB below
+      }
+    }
+
+    // 2. Fallback to LRCLIB public API
+    const cleanTitle = payload.title
+      .replace(/\(.*?\)|\[.*?\]/g, "")
+      .replace(/official\s*(music\s*)?video|lyrics|audio|hd|4k/gi, "")
+      .trim();
+    const cleanArtist = payload.artist
+      .replace(/\s*-\s*Topic$/i, "")
+      .trim();
+
+    const searchQueries = [
+      `https://lrclib.net/api/search?track_name=${encodeURIComponent(cleanTitle)}&artist_name=${encodeURIComponent(cleanArtist)}`,
+      `https://lrclib.net/api/search?q=${encodeURIComponent(`${cleanArtist} ${cleanTitle}`)}`,
+    ];
+
+    for (const url of searchQueries) {
+      try {
+        const res = await fetch(url, {
+          headers: { "User-Agent": "TARmusic/1.0" },
+        });
+        if (!res.ok) continue;
+        const items = (await res.json()) as Array<{
+          plainLyrics?: string;
+          syncedLyrics?: string;
+        }>;
+        if (!Array.isArray(items) || items.length === 0) continue;
+
+        const match = items.find(
+          (item) => item.plainLyrics?.trim() || item.syncedLyrics?.trim()
+        );
+        if (match) {
+          const text =
+            match.plainLyrics?.trim() ||
+            match.syncedLyrics?.replace(/\[\d+:\d+(?:\.\d+)?\]\s*/g, "").trim() ||
+            "";
+          if (text) {
+            return { lyrics: text, source: "LRCLIB" };
+          }
+        }
+      } catch {
+        // Try next query
+      }
+    }
+
+    return null;
   }
 }

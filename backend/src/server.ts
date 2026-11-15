@@ -290,6 +290,19 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       callback?.({ ok: true });
     });
 
+    socket.on("track:lyrics", async (payload, callback) => {
+      try {
+        const result = await browseService.getLyrics(payload);
+        callback(result);
+      } catch (err) {
+        console.error(
+          "[Socket.io] track:lyrics error:",
+          err instanceof Error ? err.message : err
+        );
+        callback(null);
+      }
+    });
+
     socket.on("disconnect", (reason) => {
       console.log(`[Socket.io] Client disconnected (${socket.id}): ${reason}`);
     });

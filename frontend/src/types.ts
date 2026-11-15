@@ -75,6 +75,11 @@ export interface SavedPlaylist {
   url: string;
 }
 
+export interface LyricsResult {
+  lyrics: string;
+  source: string;
+}
+
 export interface ActionAck {
   ok: boolean;
   error?: string;
@@ -140,6 +145,10 @@ export interface ClientToServerEvents {
   "playlists:delete": (
     id: string,
     callback?: (ack: ActionAck) => void
+  ) => void;
+  "track:lyrics": (
+    payload: { uri?: string; title: string; artist: string },
+    callback: (result: LyricsResult | null) => void
   ) => void;
 }
 

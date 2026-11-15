@@ -67,6 +67,11 @@ export interface SavedPlaylist {
   url: string;
 }
 
+export interface LyricsResult {
+  lyrics: string;
+  source: string;
+}
+
 export interface PlayerState {
   currentTrack: QueueTrack | null;
   queue: QueueTrack[];
@@ -141,6 +146,10 @@ export interface ClientToServerEvents {
   "playlists:delete": (
     id: string,
     callback: (ack: ActionAck) => void
+  ) => void;
+  "track:lyrics": (
+    payload: { uri?: string; title: string; artist: string },
+    callback: (result: LyricsResult | null) => void
   ) => void;
 }
 

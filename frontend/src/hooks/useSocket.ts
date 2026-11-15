@@ -3,6 +3,7 @@ import { socket } from "../socket";
 import type {
   ArtistProfile,
   BrowseSearchResult,
+  LyricsResult,
   PlayerState,
   PlaylistDetails,
   SavedPlaylist,
@@ -246,6 +247,21 @@ export function useSocket(pin: string | null) {
     socket.emit("playlists:delete", id);
   }, []);
 
+  const getLyrics = useCallback(
+    (payload: {
+      uri?: string;
+      title: string;
+      artist: string;
+    }): Promise<LyricsResult | null> => {
+      return new Promise((resolve) => {
+        socket.emit("track:lyrics", payload, (result) => {
+          resolve(result ?? null);
+        });
+      });
+    },
+    []
+  );
+
   return {
     playerState,
     savedPlaylists,
@@ -268,5 +284,6 @@ export function useSocket(pin: string | null) {
     setVolume,
     savePlaylist,
     deletePlaylist,
+    getLyrics,
   };
 }

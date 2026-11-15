@@ -4,6 +4,7 @@ import { PinModal } from "./components/PinModal";
 import { SearchBar } from "./components/SearchBar";
 import { Queue } from "./components/Queue";
 import { PlayerBar } from "./components/PlayerBar";
+import { FullPlayer } from "./components/FullPlayer";
 import { ArtistView } from "./components/ArtistView";
 import { PlaylistView } from "./components/PlaylistView";
 import { SavedPlaylists } from "./components/SavedPlaylists";
@@ -31,6 +32,7 @@ export default function App() {
   const [playlistDetails, setPlaylistDetails] =
     useState<PlaylistDetails | null>(null);
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false);
+  const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
 
   const {
     playerState,
@@ -53,6 +55,7 @@ export default function App() {
     setVolume,
     savePlaylist,
     deletePlaylist,
+    getLyrics,
   } = useSocket(pin);
 
   useEffect(() => {
@@ -275,6 +278,25 @@ export default function App() {
         onSkip={skip}
         onSeek={seek}
         onSetVolume={setVolume}
+        onExpand={() => setIsFullPlayerOpen(true)}
+      />
+
+      {/* Fullscreen Now Playing Drawer */}
+      <FullPlayer
+        isOpen={isFullPlayerOpen}
+        onClose={() => setIsFullPlayerOpen(false)}
+        playerState={playerState}
+        savedPlaylists={savedPlaylists}
+        onPlay={play}
+        onPause={pause}
+        onSkip={skip}
+        onSeek={seek}
+        onSetVolume={setVolume}
+        onPlayNow={(trackId) => void playNow({ trackId })}
+        onRemoveTrack={removeTrack}
+        onMoveTrack={moveTrack}
+        onOpenPlaylist={(id) => void handleOpenPlaylist(id, false)}
+        onGetLyrics={getLyrics}
       />
     </div>
   );

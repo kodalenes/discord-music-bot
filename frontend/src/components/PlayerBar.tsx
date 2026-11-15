@@ -7,6 +7,7 @@ import {
   Volume1,
   VolumeX,
   Disc3,
+  ChevronUp,
 } from "lucide-react";
 import type { PlayerState } from "../types";
 import { formatDuration } from "../utils";
@@ -18,6 +19,7 @@ interface PlayerBarProps {
   onSkip: () => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
+  onExpand: () => void;
 }
 
 export function PlayerBar({
@@ -27,6 +29,7 @@ export function PlayerBar({
   onSkip,
   onSeek,
   onSetVolume,
+  onExpand,
 }: PlayerBarProps) {
   const { currentTrack, isPlaying, position, volume } = playerState;
   const [previousVolume, setPreviousVolume] = useState(volume || 80);
@@ -95,10 +98,14 @@ export function PlayerBar({
         />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-4">
+      <div
+        onClick={onExpand}
+        className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+        title="Tam Ekran Oynatıcıyı Aç"
+      >
         {/* Left: Track Information */}
         <div className="flex items-center gap-3 min-w-0 flex-1 max-w-xs sm:max-w-sm">
-          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-neutral-900 shrink-0 border border-white/5">
+          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-neutral-900 shrink-0 border border-white/5 group/art">
             {currentTrack?.thumbnail ? (
               <img
                 src={currentTrack.thumbnail}
@@ -123,7 +130,10 @@ export function PlayerBar({
         </div>
 
         {/* Center: Playback Controls */}
-        <div className="flex flex-col items-center gap-1 shrink-0">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="flex flex-col items-center gap-1 shrink-0 cursor-default"
+        >
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Play / Pause button */}
             {isPlaying ? (
@@ -166,7 +176,10 @@ export function PlayerBar({
         </div>
 
         {/* Right: Volume & Time Controls */}
-        <div className="flex items-center justify-end gap-2 sm:gap-3 flex-1">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center justify-end gap-2 sm:gap-3 flex-1 cursor-default"
+        >
           {/* Mobile time display */}
           <span className="text-[11px] font-mono text-neutral-400 sm:hidden">
             {formatDuration(currentPos)}
@@ -193,6 +206,14 @@ export function PlayerBar({
               />
             </div>
           </div>
+
+          <button
+            onClick={onExpand}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            title="Tam Ekran Aç"
+          >
+            <ChevronUp className="w-5 h-5" />
+          </button>
         </div>
       </div>
     </div>
