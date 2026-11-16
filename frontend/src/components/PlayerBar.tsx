@@ -18,15 +18,7 @@ import {
 } from "lucide-react";
 import type { AudioFilterPreset, PlayerState } from "../types";
 import { formatDuration } from "../utils";
-
-const FILTER_OPTIONS: { id: AudioFilterPreset; label: string }[] = [
-  { id: "off", label: "Normal" },
-  { id: "bassboost", label: "Bass Boost" },
-  { id: "nightcore", label: "Nightcore" },
-  { id: "vaporwave", label: "Vaporwave" },
-  { id: "8d", label: "8D Audio" },
-  { id: "karaoke", label: "Karaoke" },
-];
+import { AUDIO_PRESET_LIST } from "./AudioStudioModal";
 
 interface PlayerBarProps {
   playerState: PlayerState;
@@ -38,6 +30,7 @@ interface PlayerBarProps {
   onCycleLoop: () => void;
   onToggleAutoplay: () => void;
   onSetAudioFilter: (preset: AudioFilterPreset) => void;
+  onOpenAudioStudio: () => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onExpand: () => void;
@@ -55,6 +48,7 @@ export function PlayerBar({
   onCycleLoop,
   onToggleAutoplay,
   onSetAudioFilter,
+  onOpenAudioStudio,
   onSeek,
   onSetVolume,
   onExpand,
@@ -312,11 +306,21 @@ export function PlayerBar({
             </button>
 
             {showFilters && (
-              <div className="absolute bottom-full right-0 mb-3 w-44 bg-[#161616] border border-white/10 rounded-2xl shadow-2xl p-2 z-50 space-y-1">
+              <div className="absolute bottom-full right-0 mb-3 w-48 bg-[#161616] border border-white/10 rounded-2xl shadow-2xl p-2 z-50 space-y-1 max-h-80 overflow-y-auto">
+                <button
+                  onClick={() => {
+                    setShowFilters(false);
+                    onOpenAudioStudio();
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 transition-colors cursor-pointer mb-1"
+                >
+                  <span>Ses Stüdyosu (EQ)</span>
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                </button>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 px-2 py-1">
-                  Ses Efektleri (EQ)
+                  Hazır Modlar
                 </p>
-                {FILTER_OPTIONS.map((opt) => (
+                {AUDIO_PRESET_LIST.map((opt) => (
                   <button
                     key={opt.id}
                     onClick={() => {

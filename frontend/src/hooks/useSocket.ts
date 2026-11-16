@@ -6,6 +6,7 @@ import type {
   AudioFilterPreset,
   BrowseSearchResult,
   ConnectedUser,
+  CustomAudioSettings,
   ExploreFeed,
   LikedTrack,
   ListeningStats,
@@ -37,6 +38,16 @@ const INITIAL_PLAYER_STATE: PlayerState = {
   loopMode: "off",
   autoplay: false,
   audioFilter: "off",
+  audioSettings: {
+    preset: "off",
+    eqBands: [0, 0, 0, 0, 0, 0],
+    speed: 1.0,
+    pitch: 1.0,
+    rotationHz: 0,
+    lowPass: 0,
+    tremolo: false,
+    karaoke: false,
+  },
   sessionPlayCount: 0,
 };
 
@@ -397,6 +408,15 @@ export function useSocket(pin: string | null, nickname: string) {
     []
   );
 
+  const setAudioSettings = useCallback((settings: CustomAudioSettings) => {
+    setPlayerState((prev) => ({
+      ...prev,
+      audioFilter: settings.preset,
+      audioSettings: settings,
+    }));
+    socket.emit("player:audioSettings", settings);
+  }, []);
+
   const dismissExploreTrack = useCallback(
     (track: { id?: string; title: string; artist: string; uri?: string }) => {
       socket.emit("explore:dismiss", track);
@@ -453,6 +473,7 @@ export function useSocket(pin: string | null, nickname: string) {
     cycleLoop,
     toggleAutoplay,
     setAudioFilter,
+    setAudioSettings,
     seek,
     setVolume,
     savePlaylist,

@@ -27,6 +27,7 @@ import { SavedPlaylists } from "./components/SavedPlaylists";
 import { ExploreView } from "./components/ExploreView";
 import { StatsView } from "./components/StatsView";
 import { LikedTracksView } from "./components/LikedTracksView";
+import { AudioStudioModal } from "./components/AudioStudioModal";
 import { useSocket } from "./hooks/useSocket";
 import { isTrackLiked } from "./utils";
 import type { ArtistProfile, ExploreFeed, PlaylistDetails } from "./types";
@@ -64,6 +65,7 @@ export default function App() {
   const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
   const [showUsersMenu, setShowUsersMenu] = useState(false);
   const [pastedUrl, setPastedUrl] = useState<string | null>(null);
+  const [isAudioStudioOpen, setIsAudioStudioOpen] = useState(false);
 
   const {
     playerState,
@@ -98,6 +100,7 @@ export default function App() {
     cycleLoop,
     toggleAutoplay,
     setAudioFilter,
+    setAudioSettings,
     seek,
     setVolume,
     savePlaylist,
@@ -713,6 +716,7 @@ export default function App() {
         onCycleLoop={() => cycleLoop()}
         onToggleAutoplay={() => toggleAutoplay()}
         onSetAudioFilter={setAudioFilter}
+        onOpenAudioStudio={() => setIsAudioStudioOpen(true)}
         onSeek={seek}
         onSetVolume={setVolume}
         onExpand={() => navigateTo(view, true)}
@@ -802,6 +806,7 @@ export default function App() {
         onCycleLoop={() => cycleLoop()}
         onToggleAutoplay={() => toggleAutoplay()}
         onSetAudioFilter={setAudioFilter}
+        onOpenAudioStudio={() => setIsAudioStudioOpen(true)}
         onSeek={seek}
         onSetVolume={setVolume}
         onPlayNow={(trackId) => void playNow({ trackId })}
@@ -818,6 +823,15 @@ export default function App() {
             toggleLike(playerState.currentTrack);
           }
         }}
+      />
+
+      <AudioStudioModal
+        isOpen={isAudioStudioOpen}
+        onClose={() => setIsAudioStudioOpen(false)}
+        audioSettings={playerState.audioSettings}
+        activePreset={playerState.audioFilter}
+        onSelectPreset={setAudioFilter}
+        onApplySettings={setAudioSettings}
       />
     </div>
   );

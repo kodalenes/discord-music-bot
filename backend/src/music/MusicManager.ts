@@ -9,6 +9,7 @@ import {
   Connectors,
   LoadType,
   Shoukaku,
+  type FilterOptions,
   type Node,
   type NodeOption,
   type Player,
@@ -17,6 +18,7 @@ import {
 import { config } from "../config.js";
 import type {
   AudioFilterPreset,
+  CustomAudioSettings,
   LikedTrack,
   ListeningStats,
   LoopMode,
@@ -36,6 +38,85 @@ import { YoutubeBrowseService } from "./YoutubeBrowseService.js";
 
 const URL_REGEX = /^https?:\/\//i;
 
+const DEFAULT_AUDIO_SETTINGS: CustomAudioSettings = {
+  preset: "off",
+  eqBands: [0, 0, 0, 0, 0, 0],
+  speed: 1.0,
+  pitch: 1.0,
+  rotationHz: 0,
+  lowPass: 0,
+  tremolo: false,
+  karaoke: false,
+};
+
+const PRESET_AUDIO_SETTINGS: Record<
+  Exclude<AudioFilterPreset, "custom">,
+  CustomAudioSettings
+> = {
+  off: { ...DEFAULT_AUDIO_SETTINGS },
+  bassboost: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "bassboost",
+    eqBands: [0.28, 0.22, 0.1, 0, 0, 0.04],
+  },
+  subbass: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "subbass",
+    eqBands: [0.42, 0.3, 0.08, -0.05, 0, 0],
+  },
+  nightcore: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "nightcore",
+    speed: 1.18,
+    pitch: 1.18,
+  },
+  vaporwave: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "vaporwave",
+    eqBands: [0.12, 0.1, 0.05, 0, -0.06, -0.1],
+    speed: 0.85,
+    pitch: 0.82,
+    lowPass: 8,
+  },
+  "8d": {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "8d",
+    rotationHz: 0.2,
+  },
+  lofi: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "lofi",
+    eqBands: [0.14, 0.1, 0.05, -0.04, -0.12, -0.2],
+    lowPass: 16,
+  },
+  rock: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "rock",
+    eqBands: [0.18, 0.12, -0.08, 0.06, 0.16, 0.2],
+  },
+  pop: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "pop",
+    eqBands: [0.06, 0.1, 0.02, 0.12, 0.14, 0.1],
+  },
+  club: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "club",
+    eqBands: [0.25, 0.22, 0.06, 0, 0.12, 0.16],
+  },
+  soft: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "soft",
+    eqBands: [0.08, 0.04, 0.02, -0.02, -0.1, -0.16],
+    lowPass: 6,
+  },
+  karaoke: {
+    ...DEFAULT_AUDIO_SETTINGS,
+    preset: "karaoke",
+    karaoke: true,
+  },
+};
+
 export class MusicManager {
   private readonly client: Client;
   private readonly shoukaku: Shoukaku;
@@ -47,6 +128,10 @@ export class MusicManager {
   private loopMode: LoopMode = "off";
   private autoplay = false;
   private audioFilter: AudioFilterPreset = "off";
+  private audioSettings: CustomAudioSettings = {
+    ...DEFAULT_AUDIO_SETTINGS,
+    eqBands: [...DEFAULT_AUDIO_SETTINGS.eqBands],
+  };
   private sessionPlayCount = 0;
   private paused = false;
   private volume = 80;
@@ -675,51 +760,122 @@ export class MusicManager {
   }
 
   public async setAudioFilter(preset: AudioFilterPreset): Promise<void> {
-    this.audioFilter = preset;
-    if (this.player) {
-      switch (preset) {
-        case "bassboost":
-          await this.player.setFilters({
-            equalizer: [
-              { band: 0, gain: 0.25 },
-              { band: 1, gain: 0.2 },
-              { band: 2, gain: 0.14 },
-              { band: 3, gain: 0.08 },
-            ],
-          });
-          break;
-        case "nightcore":
-          await this.player.setFilters({
-            timescale: { speed: 1.18, pitch: 1.18, rate: 1.0 },
-          });
-          break;
-        case "vaporwave":
-          await this.player.setFilters({
-            timescale: { speed: 0.85, pitch: 0.82, rate: 1.0 },
-          });
-          break;
-        case "8d":
-          await this.player.setFilters({
-            rotation: { rotationHz: 0.2 },
-          });
-          break;
-        case "karaoke":
-          await this.player.setFilters({
-            karaoke: {
-              level: 1.0,
-              monoLevel: 1.0,
-              filterBand: 220.0,
-              filterWidth: 100.0,
-            },
-          });
-          break;
-        case "off":
-        default:
-          await this.player.setFilters({});
-          break;
-      }
+    if (preset === "custom") {
+      await this.setAudioSettings(this.audioSettings);
+      return;
     }
+    const presetConfig = PRESET_AUDIO_SETTINGS[preset] ?? DEFAULT_AUDIO_SETTINGS;
+    await this.setAudioSettings({
+      ...presetConfig,
+      eqBands: [...presetConfig.eqBands],
+    });
+  }
+
+  public async setAudioSettings(settings: CustomAudioSettings): Promise<void> {
+    const clamp = (val: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, Number.isFinite(val) ? val : min));
+
+    const eqBands: [number, number, number, number, number, number] = [
+      clamp(settings.eqBands[0] ?? 0, -0.25, 0.5),
+      clamp(settings.eqBands[1] ?? 0, -0.25, 0.5),
+      clamp(settings.eqBands[2] ?? 0, -0.25, 0.5),
+      clamp(settings.eqBands[3] ?? 0, -0.25, 0.5),
+      clamp(settings.eqBands[4] ?? 0, -0.25, 0.5),
+      clamp(settings.eqBands[5] ?? 0, -0.25, 0.5),
+    ];
+
+    this.audioSettings = {
+      preset: settings.preset || "custom",
+      eqBands,
+      speed: clamp(settings.speed ?? 1, 0.5, 1.5),
+      pitch: clamp(settings.pitch ?? 1, 0.5, 1.5),
+      rotationHz: clamp(settings.rotationHz ?? 0, 0, 0.5),
+      lowPass: clamp(settings.lowPass ?? 0, 0, 30),
+      tremolo: Boolean(settings.tremolo),
+      karaoke: Boolean(settings.karaoke),
+    };
+    this.audioFilter = this.audioSettings.preset;
+
+    await this.applyAudioSettingsToPlayer();
     this.emitState();
+  }
+
+  private async applyAudioSettingsToPlayer(): Promise<void> {
+    if (!this.player) return;
+    const s = this.audioSettings;
+
+    const hasEq = s.eqBands.some((g) => Math.abs(g) > 0.005);
+    const hasTimescale =
+      Math.abs(s.speed - 1.0) > 0.01 || Math.abs(s.pitch - 1.0) > 0.01;
+    const hasRotation = s.rotationHz > 0.01;
+    const hasLowPass = s.lowPass > 0.5;
+
+    if (
+      !hasEq &&
+      !hasTimescale &&
+      !hasRotation &&
+      !hasLowPass &&
+      !s.tremolo &&
+      !s.karaoke
+    ) {
+      await this.player.setFilters({});
+      return;
+    }
+
+    const filters: FilterOptions = {};
+
+    if (hasEq) {
+      // Map 6 studio sliders onto Lavalink's 15 EQ bands (0..14)
+      const bandMapping: [number, number][] = [
+        [0, s.eqBands[0]],
+        [1, s.eqBands[0]],
+        [2, s.eqBands[1]],
+        [3, s.eqBands[1]],
+        [4, s.eqBands[2]],
+        [5, s.eqBands[2]],
+        [6, s.eqBands[3]],
+        [7, s.eqBands[3]],
+        [8, s.eqBands[3]],
+        [9, s.eqBands[3]],
+        [10, s.eqBands[4]],
+        [11, s.eqBands[4]],
+        [12, s.eqBands[5]],
+        [13, s.eqBands[5]],
+        [14, s.eqBands[5]],
+      ];
+      filters.equalizer = bandMapping.map(([band, gain]) => ({ band, gain }));
+    }
+
+    if (hasTimescale) {
+      filters.timescale = {
+        speed: s.speed,
+        pitch: s.pitch,
+        rate: 1.0,
+      };
+    }
+
+    if (hasRotation) {
+      filters.rotation = { rotationHz: s.rotationHz };
+    }
+
+    if (hasLowPass) {
+      filters.lowPass = { smoothing: s.lowPass };
+    }
+
+    if (s.tremolo) {
+      filters.tremolo = { frequency: 4.0, depth: 0.35 };
+    }
+
+    if (s.karaoke) {
+      filters.karaoke = {
+        level: 1.0,
+        monoLevel: 1.0,
+        filterBand: 220.0,
+        filterWidth: 100.0,
+      };
+    }
+
+    await this.player.setFilters(filters);
   }
 
   public removeTrack(trackId: string): void {
@@ -877,6 +1033,7 @@ export class MusicManager {
       loopMode: this.loopMode,
       autoplay: this.autoplay,
       audioFilter: this.audioFilter,
+      audioSettings: this.audioSettings,
       sessionPlayCount: this.sessionPlayCount,
       voiceChannel: this.getVoiceChannelInfo(),
     };

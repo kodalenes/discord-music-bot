@@ -23,6 +23,7 @@ import {
   Plus,
   Infinity as InfinityIcon,
   Heart,
+  SlidersHorizontal,
 } from "lucide-react";
 import type {
   AudioFilterPreset,
@@ -31,16 +32,8 @@ import type {
   PlaylistDetails,
   SavedPlaylist,
 } from "../types";
-
-const FILTER_PRESETS: { id: AudioFilterPreset; label: string }[] = [
-  { id: "off", label: "Normal" },
-  { id: "bassboost", label: "Bass Boost" },
-  { id: "nightcore", label: "Nightcore" },
-  { id: "vaporwave", label: "Vaporwave" },
-  { id: "8d", label: "8D" },
-  { id: "karaoke", label: "Karaoke" },
-];
 import { formatDuration } from "../utils";
+import { AUDIO_PRESET_LIST } from "./AudioStudioModal";
 
 type RightTab = "queue" | "lyrics" | "playlists";
 
@@ -57,6 +50,7 @@ interface FullPlayerProps {
   onCycleLoop: () => void;
   onToggleAutoplay: () => void;
   onSetAudioFilter: (preset: AudioFilterPreset) => void;
+  onOpenAudioStudio: () => void;
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onPlayNow: (trackId: string) => void;
@@ -148,6 +142,7 @@ export function FullPlayer({
   onCycleLoop,
   onToggleAutoplay,
   onSetAudioFilter,
+  onOpenAudioStudio,
   onSeek,
   onSetVolume,
   onPlayNow,
@@ -589,7 +584,20 @@ export function FullPlayer({
                   <span>Radyo</span>
                 </button>
 
-                {FILTER_PRESETS.map((preset) => (
+                <button
+                  onClick={onOpenAudioStudio}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                    audioFilter === "custom"
+                      ? "bg-red-600 text-white shadow"
+                      : "bg-white/10 text-neutral-200 hover:bg-white/20"
+                  }`}
+                  title="Özel 6-Bant EQ ve Gelişmiş Efektler"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  <span>EQ Stüdyosu</span>
+                </button>
+
+                {AUDIO_PRESET_LIST.slice(0, 6).map((preset) => (
                   <button
                     key={preset.id}
                     onClick={() => onSetAudioFilter(preset.id)}

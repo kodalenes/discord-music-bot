@@ -13,10 +13,28 @@ export type LoopMode = "off" | "track" | "queue";
 export type AudioFilterPreset =
   | "off"
   | "bassboost"
+  | "subbass"
   | "nightcore"
   | "vaporwave"
   | "8d"
-  | "karaoke";
+  | "lofi"
+  | "rock"
+  | "pop"
+  | "club"
+  | "soft"
+  | "karaoke"
+  | "custom";
+
+export interface CustomAudioSettings {
+  preset: AudioFilterPreset;
+  eqBands: [number, number, number, number, number, number];
+  speed: number;
+  pitch: number;
+  rotationHz: number;
+  lowPass: number;
+  tremolo: boolean;
+  karaoke: boolean;
+}
 
 export interface ConnectedUser {
   id: string;
@@ -67,6 +85,7 @@ export interface PlayerState {
   loopMode: LoopMode;
   autoplay: boolean;
   audioFilter: AudioFilterPreset;
+  audioSettings?: CustomAudioSettings;
   sessionPlayCount: number;
   voiceChannel?: VoiceChannelInfo | null;
 }
@@ -218,6 +237,10 @@ export interface ClientToServerEvents {
   ) => void;
   "player:filter": (
     preset: AudioFilterPreset,
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "player:audioSettings": (
+    settings: CustomAudioSettings,
     callback?: (ack: ActionAck) => void
   ) => void;
   "player:seek": (

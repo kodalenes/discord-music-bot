@@ -280,6 +280,18 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       }
     });
 
+    socket.on("player:audioSettings", async (settings, callback) => {
+      try {
+        await manager.setAudioSettings(settings);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to apply audio settings.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
     socket.on("player:seek", async (positionSeconds, callback) => {
       try {
         await manager.seek(positionSeconds);
