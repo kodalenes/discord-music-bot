@@ -358,7 +358,7 @@ export function FullPlayer({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col bg-[#070707] text-white transition-all duration-300 ease-out overflow-hidden ${
+      className={`fixed inset-0 z-50 pt-16 flex flex-col bg-[#070707] text-white transition-all duration-300 ease-out overflow-hidden ${
         isOpen
           ? "translate-y-0 opacity-100 pointer-events-auto"
           : "translate-y-full opacity-0 pointer-events-none"

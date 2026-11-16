@@ -339,7 +339,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#030303]/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-3">
+      <header className="sticky top-0 z-[60] bg-[#030303]/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 sm:gap-4">
           {/* Logo */}
           <button
