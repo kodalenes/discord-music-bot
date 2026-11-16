@@ -38,6 +38,8 @@ lavalink:
       local: false
     bufferDurationMs: 400
     frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
     playerUpdateInterval: 5
     youtubeSearchEnabled: true
     soundcloudSearchEnabled: true
