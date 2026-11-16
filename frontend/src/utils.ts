@@ -1,4 +1,4 @@
-import type { LikedTrack } from "./types";
+import type { DislikedTrack, LikedTrack } from "./types";
 
 export function formatDuration(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -45,6 +45,17 @@ export function isTrackLiked(
   if (!track) return false;
   const key = normalizeTrackMatchKey(track);
   return likedTracks.some(
+    (item) => item.id === key || normalizeTrackMatchKey(item) === key
+  );
+}
+
+export function isTrackDisliked(
+  dislikedTracks: DislikedTrack[],
+  track: { uri?: string; title: string; artist: string } | null
+): boolean {
+  if (!track) return false;
+  const key = normalizeTrackMatchKey(track);
+  return dislikedTracks.some(
     (item) => item.id === key || normalizeTrackMatchKey(item) === key
   );
 }

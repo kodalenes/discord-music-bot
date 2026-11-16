@@ -19,6 +19,7 @@ import type {
   SearchResult,
 } from "../types";
 import { formatDuration } from "../utils";
+import { useTrackMenu } from "./TrackContextMenu";
 
 type SearchTab = "tracks" | "artists" | "playlists";
 
@@ -51,6 +52,7 @@ export function SearchBar({
   onOpenArtist,
   onOpenPlaylist,
 }: SearchBarProps) {
+  const { openTrackMenu } = useTrackMenu();
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<SearchTab>("tracks");
   const [results, setResults] = useState<BrowseSearchResult>(EMPTY_RESULTS);
@@ -231,6 +233,7 @@ export function SearchBar({
                     return (
                       <div
                         key={item.id}
+                        onContextMenu={(e) => openTrackMenu(e, item)}
                         className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors group"
                       >
                         <button

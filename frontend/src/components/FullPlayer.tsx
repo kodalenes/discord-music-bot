@@ -34,6 +34,7 @@ import type {
 } from "../types";
 import { formatDuration } from "../utils";
 import { AUDIO_PRESET_LIST } from "./AudioStudioModal";
+import { useTrackMenu } from "./TrackContextMenu";
 
 type RightTab = "queue" | "lyrics" | "playlists";
 
@@ -156,6 +157,7 @@ export function FullPlayer({
   isLiked,
   onToggleLike,
 }: FullPlayerProps) {
+  const { openTrackMenu } = useTrackMenu();
   const {
     currentTrack,
     queue,
@@ -406,7 +408,12 @@ export function FullPlayer({
       <div className="relative z-10 flex-1 overflow-y-auto lg:overflow-hidden w-full px-4 sm:px-8 lg:px-10 py-6 flex flex-col lg:flex-row gap-8 items-center">
         {/* Left: Large Cover Art & Controls */}
         <div className="w-full lg:flex-1 flex flex-col items-center justify-center space-y-6">
-          <div className="w-64 h-64 sm:w-80 sm:h-80 lg:w-[380px] lg:h-[380px] rounded-3xl overflow-hidden bg-neutral-900 shadow-[0_25px_70px_rgba(0,0,0,0.75)] border border-white/15 shrink-0">
+          <div
+            onContextMenu={(e) => {
+              if (currentTrack) openTrackMenu(e, currentTrack);
+            }}
+            className="w-64 h-64 sm:w-80 sm:h-80 lg:w-[380px] lg:h-[380px] rounded-3xl overflow-hidden bg-neutral-900 shadow-[0_25px_70px_rgba(0,0,0,0.75)] border border-white/15 shrink-0"
+          >
             {currentTrack?.thumbnail ? (
               <img
                 src={currentTrack.thumbnail}
@@ -669,6 +676,9 @@ export function FullPlayer({
                   {queue.map((track, idx) => (
                     <div
                       key={track.id}
+                      onContextMenu={(e) =>
+                        openTrackMenu(e, track, { queueTrackId: track.id })
+                      }
                       className="flex items-center gap-3 py-2.5 px-2 rounded-xl hover:bg-white/5 transition-colors group"
                     >
                       <span className="w-5 text-center text-xs font-mono text-neutral-500 shrink-0">

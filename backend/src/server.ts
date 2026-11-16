@@ -4,6 +4,8 @@ import express from "express";
 import { Server, type Socket } from "socket.io";
 import { config } from "./config.js";
 import type { MusicManager } from "./music/MusicManager.js";
+import { CustomPlaylistsStore } from "./music/CustomPlaylistsStore.js";
+import { DislikedTracksStore } from "./music/DislikedTracksStore.js";
 import { LikedTracksStore } from "./music/LikedTracksStore.js";
 import { SavedPlaylistsStore } from "./music/SavedPlaylistsStore.js";
 import { YoutubeBrowseService } from "./music/YoutubeBrowseService.js";
@@ -30,7 +32,9 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
   const app = express();
   const browseService = new YoutubeBrowseService();
   const playlistsStore = new SavedPlaylistsStore();
+  const customPlaylistsStore = new CustomPlaylistsStore();
   const likesStore = new LikedTracksStore();
+  const dislikesStore = new DislikedTracksStore();
 
   app.use(
     cors({
@@ -107,11 +111,14 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
 
     console.log(`[Socket.io] Client connected: ${socket.id} (${initialNick})`);
     const manager = getMusicManager();
+    manager.setDislikedTracks(dislikesStore.list());
 
     // Send initial state immediately on connect
     socket.emit("state:sync", manager.getState());
     socket.emit("playlists:updated", playlistsStore.list());
+    socket.emit("customPlaylists:updated", customPlaylistsStore.list());
     socket.emit("likes:updated", likesStore.list());
+    socket.emit("dislikes:updated", dislikesStore.list());
     socket.emit("stats:updated", manager.getStats());
     broadcastUsers();
 
@@ -451,7 +458,10 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
           : false;
 
       try {
-        const analysis = manager.getAnalysisProfile(likesStore.list());
+        const analysis = manager.getAnalysisProfile(
+          likesStore.list(),
+          dislikesStore.list()
+        );
         const feed = await browseService.getExploreFeed(analysis, force);
         callback?.(feed);
       } catch (err) {
@@ -471,12 +481,121 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
     socket.on("explore:dismiss", (track, callback) => {
       try {
         manager.dismissRecommendation(track);
+        const res = dislikesStore.add(track);
+        manager.setDislikedTracks(res.items);
+        io.emit("dislikes:updated", res.items);
         callback?.({ ok: true });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to dismiss track.";
         callback?.({ ok: false, error: message });
       }
+    });
+
+    socket.on("dislikes:list", (callback) => {
+      callback(dislikesStore.list());
+    });
+
+    socket.on("dislikes:toggle", (track, callback) => {
+      const result = dislikesStore.toggle(track);
+      if (result.disliked) {
+        manager.dismissRecommendation(track);
+      } else {
+        manager.undismissRecommendation(track);
+      }
+      manager.setDislikedTracks(result.items);
+      io.emit("dislikes:updated", result.items);
+      const nick = connectedUsers.get(socket.id) ?? "Misafir";
+      if (result.disliked) {
+        emitActivity(`${nick} "${track.title}" şarkısını beğenmedi (önerilmeyecek)`);
+      }
+      callback?.(result);
+    });
+
+    socket.on("customPlaylists:list", (callback) => {
+      callback(customPlaylistsStore.list());
+    });
+
+    socket.on("customPlaylists:create", (payload, callback) => {
+      try {
+        const playlist = customPlaylistsStore.create(payload);
+        io.emit("customPlaylists:updated", customPlaylistsStore.list());
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        emitActivity(`${nick} "${playlist.name}" çalma listesini oluşturdu`);
+        callback?.({ ok: true, playlist });
+      } catch (err) {
+        const error =
+          err instanceof Error ? err.message : "Liste oluşturulamadı.";
+        callback?.({ ok: false, error });
+      }
+    });
+
+    socket.on("customPlaylists:update", (payload, callback) => {
+      try {
+        const updated = customPlaylistsStore.update(payload);
+        if (!updated) {
+          callback?.({ ok: false, error: "Liste bulunamadı." });
+          return;
+        }
+        io.emit("customPlaylists:updated", customPlaylistsStore.list());
+        callback?.({ ok: true });
+      } catch (err) {
+        const error =
+          err instanceof Error ? err.message : "Liste güncellenemedi.";
+        callback?.({ ok: false, error });
+      }
+    });
+
+    socket.on("customPlaylists:delete", (id, callback) => {
+      const removed = customPlaylistsStore.delete(id);
+      if (removed) {
+        io.emit("customPlaylists:updated", customPlaylistsStore.list());
+      }
+      callback?.({ ok: removed });
+    });
+
+    socket.on("customPlaylists:addTrack", (payload, callback) => {
+      try {
+        const { playlist, added } = customPlaylistsStore.addTrack(
+          payload.playlistId,
+          payload.track
+        );
+        io.emit("customPlaylists:updated", customPlaylistsStore.list());
+        if (added) {
+          const nick = connectedUsers.get(socket.id) ?? "Misafir";
+          emitActivity(
+            `${nick} "${payload.track.title}" şarkısını "${playlist.name}" listesine ekledi`
+          );
+        }
+        callback?.({ ok: true });
+      } catch (err) {
+        const error =
+          err instanceof Error ? err.message : "Şarkı listeye eklenemedi.";
+        callback?.({ ok: false, error });
+      }
+    });
+
+    socket.on("customPlaylists:removeTrack", (payload, callback) => {
+      const removed = customPlaylistsStore.removeTrack(
+        payload.playlistId,
+        payload.trackId
+      );
+      if (removed) {
+        io.emit("customPlaylists:updated", customPlaylistsStore.list());
+      }
+      callback?.({ ok: removed });
+    });
+
+    socket.on("customPlaylists:reorderTrack", (payload, callback) => {
+      const ok = customPlaylistsStore.reorderTrack(
+        payload.playlistId,
+        payload.fromIndex,
+        payload.toIndex
+      );
+      if (ok) {
+        io.emit("customPlaylists:updated", customPlaylistsStore.list());
+      }
+      callback?.({ ok });
     });
 
     socket.on("track:playNext", async (payload, callback) => {

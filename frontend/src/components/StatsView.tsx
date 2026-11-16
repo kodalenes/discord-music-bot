@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { ListeningStats } from "../types";
 import { formatDuration } from "../utils";
+import { useTrackMenu } from "./TrackContextMenu";
 
 interface StatsViewProps {
   stats: ListeningStats;
@@ -34,6 +35,7 @@ export function StatsView({
   onPlayNow,
   onAddTrack,
 }: StatsViewProps) {
+  const { openTrackMenu } = useTrackMenu();
   const topTrack = stats.topTracks[0] ?? null;
   const topRequester = stats.topRequesters[0] ?? null;
   const maxArtistCount = stats.topArtists[0]?.playCount || 1;
@@ -143,6 +145,16 @@ export function StatsView({
               return (
                 <div
                   key={track.key}
+                  onContextMenu={(e) =>
+                    openTrackMenu(e, {
+                      id: track.key,
+                      title: track.title,
+                      artist: track.artist,
+                      thumbnail: track.thumbnail,
+                      uri: track.uri,
+                      duration: track.duration,
+                    })
+                  }
                   className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-xl hover:bg-white/[0.03] transition-colors group"
                 >
                   <span

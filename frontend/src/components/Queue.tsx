@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Track } from "../types";
 import { formatDuration } from "../utils";
+import { useTrackMenu } from "./TrackContextMenu";
 
 function formatTotalDuration(totalSeconds: number): string {
   if (totalSeconds <= 0) return "0 dk";
@@ -53,6 +54,7 @@ export function Queue({
   onClearQueue,
   onDeduplicateQueue,
 }: QueueProps) {
+  const { openTrackMenu } = useTrackMenu();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -92,7 +94,10 @@ export function Queue({
         </div>
 
         {currentTrack ? (
-          <div className="relative overflow-hidden bg-[#121212] border border-white/10 rounded-2xl p-4 sm:p-5 shadow-xl group">
+          <div
+            onContextMenu={(e) => openTrackMenu(e, currentTrack)}
+            className="relative overflow-hidden bg-[#121212] border border-white/10 rounded-2xl p-4 sm:p-5 shadow-xl group"
+          >
             <div
               className="absolute -right-20 -top-20 w-64 h-64 rounded-full opacity-10 blur-3xl pointer-events-none"
               style={{
@@ -257,6 +262,9 @@ export function Queue({
               return (
                 <div
                   key={track.id}
+                  onContextMenu={(e) =>
+                    openTrackMenu(e, track, { queueTrackId: track.id })
+                  }
                   draggable
                   onDragStart={() => setDragIndex(index)}
                   onDragOver={(e) => {
@@ -434,6 +442,7 @@ export function Queue({
               {history.map((track) => (
                 <div
                   key={track.id}
+                  onContextMenu={(e) => openTrackMenu(e, track)}
                   className="flex items-center gap-3 p-3 hover:bg-white/[0.03] transition-colors group"
                 >
                   <button

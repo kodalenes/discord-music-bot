@@ -169,6 +169,36 @@ export interface LikedTrack {
   likedAt: number;
 }
 
+export interface DislikedTrack {
+  id: string;
+  title: string;
+  artist: string;
+  thumbnail: string;
+  uri: string;
+  duration: number;
+  dislikedAt: number;
+}
+
+export interface CustomPlaylistTrack {
+  id: string;
+  title: string;
+  artist: string;
+  thumbnail: string;
+  uri: string;
+  duration: number;
+  addedAt: number;
+}
+
+export interface CustomPlaylist {
+  id: string;
+  name: string;
+  description?: string;
+  thumbnail: string;
+  tracks: CustomPlaylistTrack[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface VoiceChannelInfo {
   channelName: string;
   listenerCount: number;
@@ -307,7 +337,63 @@ export interface ClientToServerEvents {
     callback?: (res: { liked: boolean; items: LikedTrack[] }) => void
   ) => void;
   "explore:dismiss": (
-    track: { id?: string; title: string; artist: string; uri?: string },
+    track: {
+      id?: string;
+      title: string;
+      artist: string;
+      thumbnail?: string;
+      uri?: string;
+      duration?: number;
+    },
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "dislikes:list": (callback: (items: DislikedTrack[]) => void) => void;
+  "dislikes:toggle": (
+    track: {
+      id?: string;
+      title: string;
+      artist: string;
+      thumbnail?: string;
+      uri?: string;
+      duration?: number;
+    },
+    callback?: (res: { disliked: boolean; items: DislikedTrack[] }) => void
+  ) => void;
+  "customPlaylists:list": (callback: (items: CustomPlaylist[]) => void) => void;
+  "customPlaylists:create": (
+    payload: {
+      name: string;
+      description?: string;
+      thumbnail?: string;
+      tracks?: Array<Omit<CustomPlaylistTrack, "addedAt">>;
+    },
+    callback?: (res: {
+      ok: boolean;
+      playlist?: CustomPlaylist;
+      error?: string;
+    }) => void
+  ) => void;
+  "customPlaylists:update": (
+    payload: { id: string; name: string; description?: string },
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "customPlaylists:delete": (
+    id: string,
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "customPlaylists:addTrack": (
+    payload: {
+      playlistId: string;
+      track: Omit<CustomPlaylistTrack, "addedAt">;
+    },
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "customPlaylists:removeTrack": (
+    payload: { playlistId: string; trackId: string },
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "customPlaylists:reorderTrack": (
+    payload: { playlistId: string; fromIndex: number; toIndex: number },
     callback?: (ack: ActionAck) => void
   ) => void;
 }
@@ -315,7 +401,9 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   "state:sync": (state: PlayerState) => void;
   "playlists:updated": (items: SavedPlaylist[]) => void;
+  "customPlaylists:updated": (items: CustomPlaylist[]) => void;
   "likes:updated": (items: LikedTrack[]) => void;
+  "dislikes:updated": (items: DislikedTrack[]) => void;
   "users:updated": (users: ConnectedUser[]) => void;
   "activity:notice": (notice: ActivityNotice) => void;
   "stats:updated": (stats: ListeningStats) => void;

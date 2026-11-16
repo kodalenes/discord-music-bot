@@ -5,9 +5,11 @@ import {
   ListMusic,
   Loader2,
   Bookmark,
+  CopyPlus,
 } from "lucide-react";
 import type { PlaylistDetails } from "../types";
 import { formatDuration } from "../utils";
+import { useTrackMenu } from "./TrackContextMenu";
 
 interface PlaylistViewProps {
   details: PlaylistDetails | null;
@@ -17,6 +19,7 @@ interface PlaylistViewProps {
   onAddAll: (uris: string[]) => void;
   onPlayNow: (uri: string) => void;
   onSavePlaylist?: (idOrUrl: string) => void;
+  onCloneAsCustomPlaylist?: (details: PlaylistDetails) => void;
 }
 
 export function PlaylistView({
@@ -27,7 +30,9 @@ export function PlaylistView({
   onAddAll,
   onPlayNow,
   onSavePlaylist,
+  onCloneAsCustomPlaylist,
 }: PlaylistViewProps) {
+  const { openTrackMenu } = useTrackMenu();
   if (isLoading) {
     return (
       <div className="bg-[#121212] border border-white/5 rounded-3xl p-8 flex flex-col items-center justify-center min-h-[340px] gap-3 text-neutral-400">
@@ -121,6 +126,15 @@ export function PlaylistView({
                   Listelerime Kaydet
                 </button>
               )}
+              {onCloneAsCustomPlaylist && details.tracks.length > 0 && (
+                <button
+                  onClick={() => onCloneAsCustomPlaylist(details)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-200 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <CopyPlus className="w-3.5 h-3.5" />
+                  Düzenlenebilir Olarak Kopyala
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -137,6 +151,7 @@ export function PlaylistView({
             {details.tracks.map((track, idx) => (
               <div
                 key={`${track.id}-${idx}`}
+                onContextMenu={(e) => openTrackMenu(e, track)}
                 className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-white/5 transition-colors group"
               >
                 <span className="w-5 text-center text-xs text-neutral-500 font-mono">

@@ -19,6 +19,7 @@ import {
 import type { AudioFilterPreset, PlayerState } from "../types";
 import { formatDuration } from "../utils";
 import { AUDIO_PRESET_LIST } from "./AudioStudioModal";
+import { useTrackMenu } from "./TrackContextMenu";
 
 interface PlayerBarProps {
   playerState: PlayerState;
@@ -55,6 +56,7 @@ export function PlayerBar({
   isLiked,
   onToggleLike,
 }: PlayerBarProps) {
+  const { openTrackMenu } = useTrackMenu();
   const {
     currentTrack,
     isPlaying,
@@ -142,7 +144,12 @@ export function PlayerBar({
         title="Tam Ekran Oynatıcıyı Aç"
       >
         {/* Left: Track Information */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div
+          onContextMenu={(e) => {
+            if (currentTrack) openTrackMenu(e, currentTrack);
+          }}
+          className="flex items-center gap-3 min-w-0"
+        >
           <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-neutral-900 shrink-0 border border-white/5 group/art">
             {currentTrack?.thumbnail ? (
               <img

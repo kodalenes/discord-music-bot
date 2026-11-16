@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ArtistProfile } from "../types";
 import { formatDuration } from "../utils";
+import { useTrackMenu } from "./TrackContextMenu";
 
 interface ArtistViewProps {
   profile: ArtistProfile | null;
@@ -29,6 +30,7 @@ export function ArtistView({
   onPlayNow,
   onOpenPlaylist,
 }: ArtistViewProps) {
+  const { openTrackMenu } = useTrackMenu();
   if (isLoading) {
     return (
       <div className="bg-[#121212] border border-white/5 rounded-3xl p-8 flex flex-col items-center justify-center min-h-[340px] gap-3 text-neutral-400">
@@ -130,6 +132,7 @@ export function ArtistView({
               {profile.topSongs.map((song, idx) => (
                 <div
                   key={`${song.id}-${idx}`}
+                  onContextMenu={(e) => openTrackMenu(e, song)}
                   className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-white/5 transition-colors group"
                 >
                   <span className="w-5 text-center text-xs text-neutral-500 font-mono">

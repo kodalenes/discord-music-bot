@@ -7,6 +7,9 @@ import type {
   BrowseSearchResult,
   ConnectedUser,
   CustomAudioSettings,
+  CustomPlaylist,
+  CustomPlaylistTrack,
+  DislikedTrack,
   ExploreFeed,
   LikedTrack,
   ListeningStats,
@@ -54,7 +57,9 @@ const INITIAL_PLAYER_STATE: PlayerState = {
 export function useSocket(pin: string | null, nickname: string) {
   const [playerState, setPlayerState] = useState<PlayerState>(INITIAL_PLAYER_STATE);
   const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
+  const [customPlaylists, setCustomPlaylists] = useState<CustomPlaylist[]>([]);
   const [likedTracks, setLikedTracks] = useState<LikedTrack[]>([]);
+  const [dislikedTracks, setDislikedTracks] = useState<DislikedTrack[]>([]);
   const [stats, setStats] = useState<ListeningStats>(INITIAL_STATS);
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
   const [notices, setNotices] = useState<ActivityNotice[]>([]);
@@ -88,8 +93,14 @@ export function useSocket(pin: string | null, nickname: string) {
       socket.emit("playlists:list", (items) => {
         if (Array.isArray(items)) setSavedPlaylists(items);
       });
+      socket.emit("customPlaylists:list", (items) => {
+        if (Array.isArray(items)) setCustomPlaylists(items);
+      });
       socket.emit("likes:list", (items) => {
         if (Array.isArray(items)) setLikedTracks(items);
+      });
+      socket.emit("dislikes:list", (items) => {
+        if (Array.isArray(items)) setDislikedTracks(items);
       });
       socket.emit("stats:get", (s) => {
         if (s) setStats(s);
@@ -116,8 +127,16 @@ export function useSocket(pin: string | null, nickname: string) {
       setSavedPlaylists(items);
     };
 
+    const onCustomPlaylistsUpdated = (items: CustomPlaylist[]) => {
+      setCustomPlaylists(items);
+    };
+
     const onLikesUpdated = (items: LikedTrack[]) => {
       setLikedTracks(items);
+    };
+
+    const onDislikesUpdated = (items: DislikedTrack[]) => {
+      setDislikedTracks(items);
     };
 
     const onUsersUpdated = (users: ConnectedUser[]) => {
@@ -144,7 +163,9 @@ export function useSocket(pin: string | null, nickname: string) {
     socket.on("connect_error", onConnectError);
     socket.on("state:sync", onStateSync);
     socket.on("playlists:updated", onPlaylistsUpdated);
+    socket.on("customPlaylists:updated", onCustomPlaylistsUpdated);
     socket.on("likes:updated", onLikesUpdated);
+    socket.on("dislikes:updated", onDislikesUpdated);
     socket.on("users:updated", onUsersUpdated);
     socket.on("activity:notice", onActivityNotice);
     socket.on("stats:updated", onStatsUpdated);
@@ -156,7 +177,9 @@ export function useSocket(pin: string | null, nickname: string) {
       socket.off("connect_error", onConnectError);
       socket.off("state:sync", onStateSync);
       socket.off("playlists:updated", onPlaylistsUpdated);
+      socket.off("customPlaylists:updated", onCustomPlaylistsUpdated);
       socket.off("likes:updated", onLikesUpdated);
+      socket.off("dislikes:updated", onDislikesUpdated);
       socket.off("users:updated", onUsersUpdated);
       socket.off("activity:notice", onActivityNotice);
       socket.off("stats:updated", onStatsUpdated);
@@ -418,8 +441,84 @@ export function useSocket(pin: string | null, nickname: string) {
   }, []);
 
   const dismissExploreTrack = useCallback(
-    (track: { id?: string; title: string; artist: string; uri?: string }) => {
+    (track: {
+      id?: string;
+      title: string;
+      artist: string;
+      thumbnail?: string;
+      uri?: string;
+      duration?: number;
+    }) => {
       socket.emit("explore:dismiss", track);
+    },
+    []
+  );
+
+  const toggleDislike = useCallback(
+    (track: {
+      id?: string;
+      title: string;
+      artist: string;
+      thumbnail?: string;
+      uri?: string;
+      duration?: number;
+    }) => {
+      socket.emit("dislikes:toggle", track);
+    },
+    []
+  );
+
+  const createCustomPlaylist = useCallback(
+    (payload: {
+      name: string;
+      description?: string;
+      thumbnail?: string;
+      tracks?: Array<Omit<CustomPlaylistTrack, "addedAt">>;
+    }): Promise<{ ok: boolean; playlist?: CustomPlaylist; error?: string }> => {
+      return new Promise((resolve) => {
+        socket.emit("customPlaylists:create", payload, (res) => {
+          resolve(res ?? { ok: false, error: "Sunucu yanıt vermedi." });
+        });
+      });
+    },
+    []
+  );
+
+  const updateCustomPlaylist = useCallback(
+    (payload: { id: string; name: string; description?: string }) => {
+      socket.emit("customPlaylists:update", payload);
+    },
+    []
+  );
+
+  const deleteCustomPlaylist = useCallback((id: string) => {
+    socket.emit("customPlaylists:delete", id);
+  }, []);
+
+  const addTrackToCustomPlaylist = useCallback(
+    (
+      playlistId: string,
+      track: Omit<CustomPlaylistTrack, "addedAt">
+    ) => {
+      socket.emit("customPlaylists:addTrack", { playlistId, track });
+    },
+    []
+  );
+
+  const removeTrackFromCustomPlaylist = useCallback(
+    (playlistId: string, trackId: string) => {
+      socket.emit("customPlaylists:removeTrack", { playlistId, trackId });
+    },
+    []
+  );
+
+  const reorderCustomPlaylistTrack = useCallback(
+    (playlistId: string, fromIndex: number, toIndex: number) => {
+      socket.emit("customPlaylists:reorderTrack", {
+        playlistId,
+        fromIndex,
+        toIndex,
+      });
     },
     []
   );
@@ -442,7 +541,9 @@ export function useSocket(pin: string | null, nickname: string) {
   return {
     playerState,
     savedPlaylists,
+    customPlaylists,
     likedTracks,
+    dislikedTracks,
     stats,
     connectedUsers,
     notices,
@@ -461,7 +562,14 @@ export function useSocket(pin: string | null, nickname: string) {
     clearQueue,
     deduplicateQueue,
     toggleLike,
+    toggleDislike,
     dismissExploreTrack,
+    createCustomPlaylist,
+    updateCustomPlaylist,
+    deleteCustomPlaylist,
+    addTrackToCustomPlaylist,
+    removeTrackFromCustomPlaylist,
+    reorderCustomPlaylistTrack,
     removeTrack,
     moveTrack,
     reorderTrack,

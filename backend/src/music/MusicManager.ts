@@ -19,6 +19,7 @@ import { config } from "../config.js";
 import type {
   AudioFilterPreset,
   CustomAudioSettings,
+  DislikedTrack,
   LikedTrack,
   ListeningStats,
   LoopMode,
@@ -137,6 +138,7 @@ export class MusicManager {
   private volume = 80;
   private readonly browseService = new YoutubeBrowseService();
   private readonly statsStore = new StatsStore();
+  private dislikedVideoIds = new Set<string>();
   private trackStartTimestamp = 0;
   private pausedPositionMs = 0;
 
@@ -650,15 +652,12 @@ export class MusicManager {
     // Autoplay: when queue is empty and autoplay is enabled, find a genuinely similar track
     if (!next && this.autoplay && finished) {
       try {
-        const excludeIds = this.history
-          .map((t) => {
-            try {
-              return new URL(t.uri).searchParams.get("v") || "";
-            } catch {
-              return "";
-            }
-          })
-          .filter(Boolean);
+        const excludeIds = [
+          ...this.history
+            .map((t) => extractVideoId(t.uri) || "")
+            .filter(Boolean),
+          ...this.dislikedVideoIds,
+        ];
 
         const similar = await this.browseService.getSimilarTracks({
           uri: finished.uri,
@@ -1043,6 +1042,15 @@ export class MusicManager {
     return this.statsStore.getSummary();
   }
 
+  public setDislikedTracks(items: DislikedTrack[]): void {
+    const ids = new Set<string>();
+    for (const dt of items) {
+      const vid = extractVideoId(dt.uri);
+      if (vid) ids.add(vid);
+    }
+    this.dislikedVideoIds = ids;
+  }
+
   public dismissRecommendation(track: {
     id?: string;
     title: string;
@@ -1052,8 +1060,18 @@ export class MusicManager {
     this.statsStore.dismissTrack(track);
   }
 
+  public undismissRecommendation(track: {
+    id?: string;
+    title: string;
+    artist: string;
+    uri?: string;
+  }): void {
+    this.statsStore.undismissTrack(track);
+  }
+
   public getAnalysisProfile(
-    likedTracks?: LikedTrack[]
+    likedTracks?: LikedTrack[],
+    dislikedTracks?: DislikedTrack[]
   ): ListeningAnalysisProfile {
     const videoIds = new Set<string>();
     const metaKeys = new Set<string>();
@@ -1070,6 +1088,7 @@ export class MusicManager {
     return this.statsStore.getAnalysisProfile({
       sessionExcluded: { videoIds, metaKeys },
       likedTracks,
+      dislikedTracks,
     });
   }
 

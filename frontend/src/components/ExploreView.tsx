@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { ExploreFeed, SearchResult } from "../types";
 import { formatDuration } from "../utils";
+import { useTrackMenu } from "./TrackContextMenu";
 
 interface ExploreViewProps {
   feed: ExploreFeed | null;
@@ -41,13 +42,17 @@ function ExploreTrackCard({
   onAddTrack,
   onDismiss,
 }: ExploreTrackCardProps) {
+  const { openTrackMenu } = useTrackMenu();
   const badgeClass =
     reasonTone === "sky"
       ? "bg-sky-500/10 text-sky-300 border-sky-500/20"
       : "bg-amber-500/10 text-amber-300 border-amber-500/20";
 
   return (
-    <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 transition-colors group">
+    <div
+      onContextMenu={(e) => openTrackMenu(e, track)}
+      className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 transition-colors group"
+    >
       <button
         onClick={() => onPlayNow(track.uri)}
         className="relative w-12 h-12 rounded-xl overflow-hidden bg-neutral-800 shrink-0 cursor-pointer group/thumb"

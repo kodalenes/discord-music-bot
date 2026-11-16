@@ -28,9 +28,16 @@ import { ExploreView } from "./components/ExploreView";
 import { StatsView } from "./components/StatsView";
 import { LikedTracksView } from "./components/LikedTracksView";
 import { AudioStudioModal } from "./components/AudioStudioModal";
+import { CustomPlaylistView } from "./components/CustomPlaylistView";
+import { TrackMenuProvider } from "./components/TrackContextMenu";
 import { useSocket } from "./hooks/useSocket";
 import { isTrackLiked } from "./utils";
-import type { ArtistProfile, ExploreFeed, PlaylistDetails } from "./types";
+import type {
+  ArtistProfile,
+  ExploreFeed,
+  PlaylistDetails,
+  SavedPlaylist,
+} from "./types";
 
 const PIN_STORAGE_KEY = "muzik_pin";
 const NICKNAME_STORAGE_KEY = "muzik_nickname";
@@ -39,6 +46,7 @@ type ActiveView =
   | { kind: "queue" }
   | { kind: "explore" }
   | { kind: "playlists" }
+  | { kind: "customPlaylist"; playlistId: string }
   | { kind: "likes" }
   | { kind: "stats" }
   | { kind: "artist"; artistId: string }
@@ -70,7 +78,9 @@ export default function App() {
   const {
     playerState,
     savedPlaylists,
+    customPlaylists,
     likedTracks,
+    dislikedTracks,
     stats,
     connectedUsers,
     notices,
@@ -88,7 +98,14 @@ export default function App() {
     clearQueue,
     deduplicateQueue,
     toggleLike,
+    toggleDislike,
     dismissExploreTrack,
+    createCustomPlaylist,
+    updateCustomPlaylist,
+    deleteCustomPlaylist,
+    addTrackToCustomPlaylist,
+    removeTrackFromCustomPlaylist,
+    reorderCustomPlaylistTrack,
     removeTrack,
     moveTrack,
     reorderTrack,
@@ -148,13 +165,15 @@ export default function App() {
               ? "#explore"
               : nextView.kind === "playlists"
                 ? "#playlists"
-                : nextView.kind === "likes"
-                  ? "#likes"
-                  : nextView.kind === "stats"
-                    ? "#stats"
-                    : nextView.kind === "artist"
-                      ? `#artist/${nextView.artistId}`
-                      : `#playlist/${nextView.idOrUrl}`
+                : nextView.kind === "customPlaylist"
+                  ? `#custom-playlist/${nextView.playlistId}`
+                  : nextView.kind === "likes"
+                    ? "#likes"
+                    : nextView.kind === "stats"
+                      ? "#stats"
+                      : nextView.kind === "artist"
+                        ? `#artist/${nextView.artistId}`
+                        : `#playlist/${nextView.idOrUrl}`
       );
     },
     []
@@ -208,6 +227,53 @@ export default function App() {
       void loadExplore(false);
     },
     [loadExplore, navigateTo]
+  );
+
+  const handleCloneSavedPlaylist = useCallback(
+    async (pl: SavedPlaylist) => {
+      const details = await getPlaylistDetails(pl.id, false);
+      const res = await createCustomPlaylist({
+        name: pl.title,
+        description: pl.author ? `${pl.author} listesinden kopyalandı` : "",
+        thumbnail: pl.thumbnail,
+        tracks: (details?.tracks ?? []).map((t) => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          thumbnail: t.thumbnail,
+          uri: t.uri,
+          duration: t.duration,
+        })),
+      });
+      if (res.ok && res.playlist) {
+        navigateTo({ kind: "customPlaylist", playlistId: res.playlist.id });
+      }
+    },
+    [createCustomPlaylist, getPlaylistDetails, navigateTo]
+  );
+
+  const handleClonePlaylistDetails = useCallback(
+    async (details: PlaylistDetails) => {
+      const res = await createCustomPlaylist({
+        name: details.title,
+        description: details.author
+          ? `${details.author} listesinden kopyalandı`
+          : "",
+        thumbnail: details.thumbnail,
+        tracks: details.tracks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+          thumbnail: t.thumbnail,
+          uri: t.uri,
+          duration: t.duration,
+        })),
+      });
+      if (res.ok && res.playlist) {
+        navigateTo({ kind: "customPlaylist", playlistId: res.playlist.id });
+      }
+    },
+    [createCustomPlaylist, navigateTo]
   );
 
   const handleOpenArtist = useCallback(
@@ -372,7 +438,46 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#030303] text-white flex flex-col selection:bg-red-500/30 selection:text-white">
+    <TrackMenuProvider
+      likedTracks={likedTracks}
+      dislikedTracks={dislikedTracks}
+      customPlaylists={customPlaylists}
+      onPlayNow={(uri) => void playNow({ uri })}
+      onPlayNext={(uri) => playNextTrack({ uri })}
+      onAddTrack={(uri) => addTrack({ uri })}
+      onToggleLike={(track) => toggleLike(track)}
+      onToggleDislike={(track) => {
+        toggleDislike(track);
+        setExploreFeed((prev) =>
+          prev
+            ? {
+                ...prev,
+                personalizedTracks: prev.personalizedTracks.filter(
+                  (t) =>
+                    !(
+                      t.title.toLowerCase() === track.title.toLowerCase() &&
+                      t.artist.toLowerCase() === track.artist.toLowerCase()
+                    )
+                ),
+                rediscoverTracks: prev.rediscoverTracks.filter(
+                  (t) =>
+                    !(
+                      t.title.toLowerCase() === track.title.toLowerCase() &&
+                      t.artist.toLowerCase() === track.artist.toLowerCase()
+                    )
+                ),
+              }
+            : prev
+        );
+      }}
+      onAddToCustomPlaylist={addTrackToCustomPlaylist}
+      onCreateCustomPlaylistWithTrack={async (name, track) => {
+        await createCustomPlaylist({ name, tracks: [track] });
+      }}
+      onRemoveFromCustomPlaylist={removeTrackFromCustomPlaylist}
+      onRemoveFromQueue={removeTrack}
+    >
+      <div className="min-h-screen bg-[#030303] text-white flex flex-col selection:bg-red-500/30 selection:text-white">
       {/* Live Activity Toast Notifications */}
       {notices.length > 0 && (
         <div className="fixed top-16 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-xs">
@@ -567,13 +672,13 @@ export default function App() {
           <button
             onClick={() => navigateTo({ kind: "playlists" }, false)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-              view.kind === "playlists"
+              view.kind === "playlists" || view.kind === "customPlaylist"
                 ? "bg-white text-black shadow"
                 : "bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10"
             }`}
           >
             <ListMusic className="w-3.5 h-3.5" />
-            Listelerim ({savedPlaylists.length})
+            Listelerim ({savedPlaylists.length + customPlaylists.length})
           </button>
 
           <button
@@ -652,20 +757,48 @@ export default function App() {
         {view.kind === "playlists" && (
           <SavedPlaylists
             playlists={savedPlaylists}
+            customPlaylists={customPlaylists}
             onSavePlaylist={savePlaylist}
             onDeletePlaylist={deletePlaylist}
             onOpenPlaylist={(id) => void handleOpenPlaylist(id, false)}
+            onCreateCustomPlaylist={createCustomPlaylist}
+            onDeleteCustomPlaylist={deleteCustomPlaylist}
+            onOpenCustomPlaylist={(playlistId) =>
+              navigateTo({ kind: "customPlaylist", playlistId })
+            }
+            onCloneSavedPlaylist={handleCloneSavedPlaylist}
+          />
+        )}
+
+        {view.kind === "customPlaylist" && (
+          <CustomPlaylistView
+            playlist={
+              customPlaylists.find((p) => p.id === view.playlistId) ?? null
+            }
+            onBack={() => navigateTo({ kind: "playlists" }, false)}
+            onUpdatePlaylist={updateCustomPlaylist}
+            onDeletePlaylist={deleteCustomPlaylist}
+            onPlayNow={(uri) => void playNow({ uri })}
+            onPlayNext={(uri) => playNextTrack({ uri })}
+            onAddTrack={(uri) => addTrack({ uri })}
+            onAddAll={(uris) => void addTracks(uris)}
+            onAddTrackToPlaylist={addTrackToCustomPlaylist}
+            onRemoveTrack={removeTrackFromCustomPlaylist}
+            onReorderTrack={reorderCustomPlaylistTrack}
+            onBrowseSearch={browseSearch}
           />
         )}
 
         {view.kind === "likes" && (
           <LikedTracksView
             tracks={likedTracks}
+            dislikedTracks={dislikedTracks}
             onPlayNow={(uri) => void playNow({ uri })}
             onPlayNext={(uri) => playNextTrack({ uri })}
             onAddTrack={(uri) => addTrack({ uri })}
             onAddAll={(uris) => void addTracks(uris)}
             onToggleLike={(track) => toggleLike(track)}
+            onToggleDislike={(track) => toggleDislike(track)}
           />
         )}
 
@@ -701,6 +834,9 @@ export default function App() {
             onAddAll={(uris) => void addTracks(uris)}
             onPlayNow={(uri) => void playNow({ uri })}
             onSavePlaylist={(id) => void savePlaylist(id)}
+            onCloneAsCustomPlaylist={(details) =>
+              void handleClonePlaylistDetails(details)
+            }
           />
         )}
       </main>
@@ -833,6 +969,7 @@ export default function App() {
         onSelectPreset={setAudioFilter}
         onApplySettings={setAudioSettings}
       />
-    </div>
+      </div>
+    </TrackMenuProvider>
   );
 }

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  DislikedTrack,
   LikedTrack,
   ListeningStats,
   PersonalizedTrackRecommendation,
@@ -310,12 +311,31 @@ export class StatsStore {
     this.saveToDisk();
   }
 
+  public undismissTrack(track: {
+    id?: string;
+    title: string;
+    artist: string;
+    uri?: string;
+  }): void {
+    const vid = extractVideoId(track.uri);
+    const metaKey = normalizeMetaKey(track.title, track.artist);
+    this.data.dismissedIds = (this.data.dismissedIds ?? []).filter(
+      (id) => id !== vid && id !== track.id
+    );
+    this.data.dismissedMetaKeys = (this.data.dismissedMetaKeys ?? []).filter(
+      (m) => m !== metaKey
+    );
+    this.data.updatedAt = Date.now();
+    this.saveToDisk();
+  }
+
   public getAnalysisProfile(options?: {
     sessionExcluded?: {
       videoIds: Set<string>;
       metaKeys: Set<string>;
     };
     likedTracks?: LikedTrack[];
+    dislikedTracks?: DislikedTrack[];
   }): ListeningAnalysisProfile {
     const sessionExcludedIds =
       options?.sessionExcluded?.videoIds ?? new Set<string>();
@@ -325,6 +345,12 @@ export class StatsStore {
     const dismissedMetaKeys = new Set<string>(
       this.data.dismissedMetaKeys ?? []
     );
+
+    for (const dt of options?.dislikedTracks ?? []) {
+      const vid = extractVideoId(dt.uri);
+      if (vid) dismissedIds.add(vid);
+      dismissedMetaKeys.add(normalizeMetaKey(dt.title, dt.artist));
+    }
 
     const likedVideoIds = new Set<string>();
     const likedMetaKeys = new Set<string>();
