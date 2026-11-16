@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   Plus,
   Infinity as InfinityIcon,
+  Heart,
 } from "lucide-react";
 import type {
   AudioFilterPreset,
@@ -73,6 +74,8 @@ interface FullPlayerProps {
     title: string;
     artist: string;
   }) => Promise<LyricsResult | null>;
+  isLiked: boolean;
+  onToggleLike: () => void;
 }
 
 const DEFAULT_COLOR: [number, number, number] = [110, 22, 32];
@@ -155,6 +158,8 @@ export function FullPlayer({
   onMoveTrack,
   onGetPlaylistDetails,
   onGetLyrics,
+  isLiked,
+  onToggleLike,
 }: FullPlayerProps) {
   const {
     currentTrack,
@@ -421,10 +426,25 @@ export function FullPlayer({
           </div>
 
           <div className="w-full max-w-[380px] space-y-4">
-            <div className="text-center">
-              <h2 className="text-xl sm:text-2xl font-bold text-white truncate">
-                {currentTrack?.title || "Çalınan şarkı yok"}
-              </h2>
+            <div className="text-center relative">
+              <div className="flex items-center justify-center gap-2">
+                <h2 className="text-xl sm:text-2xl font-bold text-white truncate">
+                  {currentTrack?.title || "Çalınan şarkı yok"}
+                </h2>
+                {currentTrack && (
+                  <button
+                    onClick={onToggleLike}
+                    className={`p-1.5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                      isLiked
+                        ? "text-rose-500 hover:bg-rose-500/10"
+                        : "text-neutral-400 hover:text-white hover:bg-white/10"
+                    }`}
+                    title={isLiked ? "Beğenilerden Kaldır" : "Beğenilenlere Ekle"}
+                  >
+                    <Heart className={`w-5 h-5 ${isLiked ? "fill-current" : ""}`} />
+                  </button>
+                )}
+              </div>
               <p className="text-sm text-neutral-300 truncate mt-1">
                 {currentTrack?.artist || "Bir şarkı seçin"}
               </p>

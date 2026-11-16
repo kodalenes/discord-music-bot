@@ -41,6 +41,21 @@ export interface ExploreFeed {
   playlists: PlaylistSearchResult[];
 }
 
+export interface LikedTrack {
+  id: string;
+  title: string;
+  artist: string;
+  thumbnail: string;
+  uri: string;
+  duration: number;
+  likedAt: number;
+}
+
+export interface VoiceChannelInfo {
+  channelName: string;
+  listenerCount: number;
+}
+
 export interface PlayerState {
   currentTrack: Track | null;
   queue: Track[];
@@ -53,6 +68,7 @@ export interface PlayerState {
   autoplay: boolean;
   audioFilter: AudioFilterPreset;
   sessionPlayCount: number;
+  voiceChannel?: VoiceChannelInfo | null;
 }
 
 export interface SearchResult {
@@ -241,11 +257,32 @@ export interface ClientToServerEvents {
     callback: (result: LyricsResult | null) => void
   ) => void;
   "stats:get": (callback: (stats: ListeningStats) => void) => void;
+  "track:playNext": (
+    payload: string | { uri: string; requester?: string },
+    callback?: (ack: ActionAck) => void
+  ) => void;
+  "queue:clear": (callback?: (ack: ActionAck) => void) => void;
+  "queue:deduplicate": (
+    callback?: (ack: { ok: boolean; removedCount: number; error?: string }) => void
+  ) => void;
+  "likes:list": (callback: (items: LikedTrack[]) => void) => void;
+  "likes:toggle": (
+    track: {
+      id?: string;
+      title: string;
+      artist: string;
+      thumbnail: string;
+      uri: string;
+      duration: number;
+    },
+    callback?: (res: { liked: boolean; items: LikedTrack[] }) => void
+  ) => void;
 }
 
 export interface ServerToClientEvents {
   "state:sync": (state: PlayerState) => void;
   "playlists:updated": (items: SavedPlaylist[]) => void;
+  "likes:updated": (items: LikedTrack[]) => void;
   "users:updated": (users: ConnectedUser[]) => void;
   "activity:notice": (notice: ActivityNotice) => void;
   "stats:updated": (stats: ListeningStats) => void;

@@ -14,6 +14,7 @@ import {
   ChevronUp,
   Infinity as InfinityIcon,
   SlidersHorizontal,
+  Heart,
 } from "lucide-react";
 import type { AudioFilterPreset, PlayerState } from "../types";
 import { formatDuration } from "../utils";
@@ -40,6 +41,8 @@ interface PlayerBarProps {
   onSeek: (position: number) => void;
   onSetVolume: (volume: number) => void;
   onExpand: () => void;
+  isLiked: boolean;
+  onToggleLike: () => void;
 }
 
 export function PlayerBar({
@@ -55,6 +58,8 @@ export function PlayerBar({
   onSeek,
   onSetVolume,
   onExpand,
+  isLiked,
+  onToggleLike,
 }: PlayerBarProps) {
   const {
     currentTrack,
@@ -166,6 +171,20 @@ export function PlayerBar({
               {currentTrack?.artist || "Bir şarkı seçin"}
             </p>
           </div>
+
+          {currentTrack && (
+            <button
+              onClick={onToggleLike}
+              className={`p-2 rounded-full transition-colors cursor-pointer shrink-0 ${
+                isLiked
+                  ? "text-rose-500 hover:bg-rose-500/10"
+                  : "text-neutral-400 hover:text-white hover:bg-white/5"
+              }`}
+              title={isLiked ? "Beğenilerden Kaldır" : "Beğenilenlere Ekle"}
+            >
+              <Heart className={`w-4 h-4 ${isLiked ? "fill-current" : ""}`} />
+            </button>
+          )}
         </div>
 
         {/* Center: Playback Controls */}

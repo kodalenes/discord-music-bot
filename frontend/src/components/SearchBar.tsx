@@ -9,6 +9,7 @@ import {
   Loader2,
   User,
   ListMusic,
+  ListPlus,
   ChevronRight,
 } from "lucide-react";
 import type {
@@ -31,6 +32,7 @@ interface SearchBarProps {
     duration?: number;
   }) => void;
   onPlayNow: (uri: string) => void;
+  onPlayNext?: (uri: string) => void;
   onOpenArtist: (artistId: string) => void;
   onOpenPlaylist: (idOrUrl: string, isAlbum?: boolean) => void;
 }
@@ -45,6 +47,7 @@ export function SearchBar({
   onBrowseSearch,
   onAddTrack,
   onPlayNow,
+  onPlayNext,
   onOpenArtist,
   onOpenPlaylist,
 }: SearchBarProps) {
@@ -279,6 +282,19 @@ export function SearchBar({
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
                         </button>
+
+                        {onPlayNext && (
+                          <button
+                            onClick={() => {
+                              onPlayNext(item.uri);
+                              setIsOpen(false);
+                            }}
+                            className="shrink-0 p-2 rounded-full bg-white/5 hover:bg-white/20 text-neutral-300 hover:text-white transition-all cursor-pointer"
+                            title="Sıradaki Olarak Çal"
+                          >
+                            <ListPlus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
                         <button
                           onClick={() => handleAdd(item)}

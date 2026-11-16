@@ -8,6 +8,13 @@ import {
   Compass,
   Users,
   BarChart3,
+  Heart,
+  Headphones,
+  Link2,
+  Play,
+  ListPlus,
+  Plus,
+  X,
 } from "lucide-react";
 import { PinModal } from "./components/PinModal";
 import { SearchBar } from "./components/SearchBar";
@@ -19,7 +26,9 @@ import { PlaylistView } from "./components/PlaylistView";
 import { SavedPlaylists } from "./components/SavedPlaylists";
 import { ExploreView } from "./components/ExploreView";
 import { StatsView } from "./components/StatsView";
+import { LikedTracksView } from "./components/LikedTracksView";
 import { useSocket } from "./hooks/useSocket";
+import { isTrackLiked } from "./utils";
 import type { ArtistProfile, ExploreFeed, PlaylistDetails } from "./types";
 
 const PIN_STORAGE_KEY = "muzik_pin";
@@ -29,6 +38,7 @@ type ActiveView =
   | { kind: "queue" }
   | { kind: "explore" }
   | { kind: "playlists" }
+  | { kind: "likes" }
   | { kind: "stats" }
   | { kind: "artist"; artistId: string }
   | { kind: "playlist"; idOrUrl: string; isAlbum?: boolean };
@@ -53,10 +63,12 @@ export default function App() {
   const [isLoadingExplore, setIsLoadingExplore] = useState(false);
   const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
   const [showUsersMenu, setShowUsersMenu] = useState(false);
+  const [pastedUrl, setPastedUrl] = useState<string | null>(null);
 
   const {
     playerState,
     savedPlaylists,
+    likedTracks,
     stats,
     connectedUsers,
     notices,
@@ -70,6 +82,10 @@ export default function App() {
     addTrack,
     addTracks,
     playNow,
+    playNextTrack,
+    clearQueue,
+    deduplicateQueue,
+    toggleLike,
     removeTrack,
     moveTrack,
     reorderTrack,
@@ -128,15 +144,44 @@ export default function App() {
               ? "#explore"
               : nextView.kind === "playlists"
                 ? "#playlists"
-                : nextView.kind === "stats"
-                  ? "#stats"
-                  : nextView.kind === "artist"
-                    ? `#artist/${nextView.artistId}`
-                    : `#playlist/${nextView.idOrUrl}`
+                : nextView.kind === "likes"
+                  ? "#likes"
+                  : nextView.kind === "stats"
+                    ? "#stats"
+                    : nextView.kind === "artist"
+                      ? `#artist/${nextView.artistId}`
+                      : `#playlist/${nextView.idOrUrl}`
       );
     },
     []
   );
+
+  // Global Ctrl+V link paste detector
+  useEffect(() => {
+    if (!pin) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const text = e.clipboardData?.getData("text")?.trim() ?? "";
+      if (
+        /^https?:\/\/(www\.|music\.|m\.)?(youtube\.com|youtu\.be|open\.spotify\.com)\//i.test(
+          text
+        )
+      ) {
+        e.preventDefault();
+        setPastedUrl(text);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [pin]);
 
   const loadExplore = useCallback(
     async (force = false) => {
@@ -367,6 +412,7 @@ export default function App() {
               onBrowseSearch={browseSearch}
               onAddTrack={addTrack}
               onPlayNow={(uri) => void playNow({ uri })}
+              onPlayNext={(uri) => playNextTrack({ uri })}
               onOpenArtist={(artistId) => void handleOpenArtist(artistId)}
               onOpenPlaylist={(idOrUrl, isAlbum) =>
                 void handleOpenPlaylist(idOrUrl, isAlbum)
@@ -374,8 +420,22 @@ export default function App() {
             />
           </div>
 
-          {/* Right: Online Users + Status + Logout */}
+          {/* Right: Discord Channel + Online Users + Status + Logout */}
           <div className="flex items-center gap-2 shrink-0 relative">
+            {playerState.voiceChannel && (
+              <div
+                className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-indigo-500/10 border border-indigo-500/20 text-indigo-300"
+                title={`Discord Ses Kanalı: ${playerState.voiceChannel.channelName} (${playerState.voiceChannel.listenerCount} dinleyici)`}
+              >
+                <Headphones className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="max-w-[110px] truncate">
+                  {playerState.voiceChannel.channelName}
+                </span>
+                <span className="text-[10px] font-mono text-indigo-400">
+                  ({playerState.voiceChannel.listenerCount})
+                </span>
+              </div>
+            )}
             <button
               onClick={() => setShowUsersMenu((prev) => !prev)}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-300 transition-colors cursor-pointer"
@@ -513,6 +573,20 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => navigateTo({ kind: "likes" }, false)}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              view.kind === "likes"
+                ? "bg-white text-black shadow"
+                : "bg-white/5 text-neutral-400 hover:text-white hover:bg-white/10"
+            }`}
+          >
+            <Heart
+              className={`w-3.5 h-3.5 ${view.kind === "likes" ? "text-rose-500 fill-current" : "text-rose-400"}`}
+            />
+            Beğendiklerim ({likedTracks.length})
+          </button>
+
+          <button
             onClick={() => navigateTo({ kind: "stats" }, false)}
             className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               view.kind === "stats"
@@ -536,6 +610,8 @@ export default function App() {
             onMoveTrack={moveTrack}
             onReorderTrack={reorderTrack}
             onPlayNow={(trackId) => void playNow({ trackId })}
+            onClearQueue={clearQueue}
+            onDeduplicateQueue={deduplicateQueue}
           />
         )}
 
@@ -545,6 +621,7 @@ export default function App() {
             isLoading={isLoadingExplore}
             onRefresh={() => void loadExplore(true)}
             onPlayNow={(uri) => void playNow({ uri })}
+            onPlayNext={(uri) => playNextTrack({ uri })}
             onAddTrack={(uri) => addTrack({ uri })}
             onOpenPlaylist={(id, isAlbum) =>
               void handleOpenPlaylist(id, isAlbum)
@@ -558,6 +635,17 @@ export default function App() {
             onSavePlaylist={savePlaylist}
             onDeletePlaylist={deletePlaylist}
             onOpenPlaylist={(id) => void handleOpenPlaylist(id, false)}
+          />
+        )}
+
+        {view.kind === "likes" && (
+          <LikedTracksView
+            tracks={likedTracks}
+            onPlayNow={(uri) => void playNow({ uri })}
+            onPlayNext={(uri) => playNextTrack({ uri })}
+            onAddTrack={(uri) => addTrack({ uri })}
+            onAddAll={(uris) => void addTracks(uris)}
+            onToggleLike={(track) => toggleLike(track)}
           />
         )}
 
@@ -611,7 +699,71 @@ export default function App() {
         onSeek={seek}
         onSetVolume={setVolume}
         onExpand={() => navigateTo(view, true)}
+        isLiked={isTrackLiked(likedTracks, playerState.currentTrack)}
+        onToggleLike={() => {
+          if (playerState.currentTrack) {
+            toggleLike(playerState.currentTrack);
+          }
+        }}
       />
+
+      {/* Quick Paste URL Toast (Ctrl+V) */}
+      {pastedUrl && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] w-[calc(100%-2rem)] max-w-md bg-[#161616]/95 backdrop-blur-xl border border-white/15 rounded-2xl p-3.5 shadow-2xl space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link2 className="w-4 h-4 text-red-400 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-white">
+                  Müzik Linki Algılandı
+                </p>
+                <p className="text-[11px] text-neutral-400 truncate">
+                  {pastedUrl}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setPastedUrl(null)}
+              className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 cursor-pointer shrink-0"
+              title="Kapat"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                void playNow({ uri: pastedUrl });
+                setPastedUrl(null);
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              Hemen Çal
+            </button>
+            <button
+              onClick={() => {
+                playNextTrack({ uri: pastedUrl });
+                setPastedUrl(null);
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <ListPlus className="w-3.5 h-3.5" />
+              Sıradaki Çal
+            </button>
+            <button
+              onClick={() => {
+                addTrack({ uri: pastedUrl });
+                setPastedUrl(null);
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Kuyruğa Ekle
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Fullscreen Now Playing Drawer */}
       <FullPlayer
@@ -643,6 +795,12 @@ export default function App() {
         onMoveTrack={moveTrack}
         onGetPlaylistDetails={getPlaylistDetails}
         onGetLyrics={getLyrics}
+        isLiked={isTrackLiked(likedTracks, playerState.currentTrack)}
+        onToggleLike={() => {
+          if (playerState.currentTrack) {
+            toggleLike(playerState.currentTrack);
+          }
+        }}
       />
     </div>
   );

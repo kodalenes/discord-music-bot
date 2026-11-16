@@ -23,6 +23,7 @@ import type {
   QueueTrack,
   ReorderPayload,
   SearchTrackResult,
+  VoiceChannelInfo,
 } from "../types.js";
 import { StatsStore, type ListeningAnalysisProfile } from "./StatsStore.js";
 import { YoutubeBrowseService } from "./YoutubeBrowseService.js";
@@ -178,6 +179,13 @@ export class MusicManager {
       !this.player
     ) {
       this.scheduleRejoin();
+    }
+
+    if (
+      oldState.channelId === targetChannelId ||
+      newState.channelId === targetChannelId
+    ) {
+      this.emitState();
     }
   }
 
@@ -387,7 +395,11 @@ export class MusicManager {
     return [];
   }
 
-  public async addTrack(uriOrQuery: string, requester = "Web"): Promise<void> {
+  public async addTrack(
+    uriOrQuery: string,
+    requester = "Web",
+    insertAtFront = false
+  ): Promise<void> {
     const trimmed = uriOrQuery.trim();
     if (!trimmed) {
       throw new Error("Track URI or query is required.");
@@ -413,16 +425,23 @@ export class MusicManager {
       throw new Error(res.data.message || "Failed to load track.");
     }
 
+    const newTracks: QueueTrack[] = [];
     if (res.loadType === LoadType.TRACK) {
-      this.queue.push(this.toQueueTrack(res.data, requester));
+      newTracks.push(this.toQueueTrack(res.data, requester));
     } else if (res.loadType === LoadType.PLAYLIST) {
       for (const track of res.data.tracks) {
-        this.queue.push(this.toQueueTrack(track, requester));
+        newTracks.push(this.toQueueTrack(track, requester));
       }
     } else if (res.loadType === LoadType.SEARCH) {
       const first = res.data[0];
       if (!first) throw new Error("No tracks found.");
-      this.queue.push(this.toQueueTrack(first, requester));
+      newTracks.push(this.toQueueTrack(first, requester));
+    }
+
+    if (insertAtFront && this.currentTrack) {
+      this.queue.unshift(...newTracks);
+    } else {
+      this.queue.push(...newTracks);
     }
 
     if (!this.currentTrack) {
@@ -786,6 +805,52 @@ export class MusicManager {
     this.emitState();
   }
 
+  public clearQueue(): void {
+    if (this.queue.length === 0) return;
+    this.queue = [];
+    this.emitState();
+  }
+
+  public deduplicateQueue(): number {
+    if (this.queue.length <= 1) return 0;
+    const seen = new Set<string>();
+    const unique: QueueTrack[] = [];
+    let removedCount = 0;
+
+    for (const track of this.queue) {
+      const key = track.uri?.trim()
+        ? track.uri.trim().toLowerCase()
+        : `${track.title.trim().toLowerCase()}::${track.artist.trim().toLowerCase()}`;
+      if (seen.has(key)) {
+        removedCount += 1;
+      } else {
+        seen.add(key);
+        unique.push(track);
+      }
+    }
+
+    if (removedCount > 0) {
+      this.queue = unique;
+      this.emitState();
+    }
+    return removedCount;
+  }
+
+  private getVoiceChannelInfo(): VoiceChannelInfo | null {
+    if (!this.discordReady) return null;
+    const guild = this.client.guilds.cache.get(config.discord.guildId);
+    const channel = guild?.channels.cache.get(
+      config.discord.voiceChannelId
+    ) as VoiceBasedChannel | undefined;
+    if (!channel || !channel.isVoiceBased()) return null;
+
+    const listenerCount = channel.members.filter((m) => !m.user.bot).size;
+    return {
+      channelName: channel.name,
+      listenerCount,
+    };
+  }
+
   private getCurrentPositionMs(): number {
     if (!this.currentTrack) return 0;
     if (this.paused) return this.pausedPositionMs;
@@ -807,6 +872,7 @@ export class MusicManager {
       autoplay: this.autoplay,
       audioFilter: this.audioFilter,
       sessionPlayCount: this.sessionPlayCount,
+      voiceChannel: this.getVoiceChannelInfo(),
     };
   }
 

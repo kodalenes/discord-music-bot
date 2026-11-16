@@ -11,6 +11,7 @@ import {
   History,
   Clock,
   BarChart3,
+  CopyMinus,
 } from "lucide-react";
 import type { Track } from "../types";
 import { formatDuration } from "../utils";
@@ -35,6 +36,8 @@ interface QueueProps {
   onMoveTrack: (trackId: string, direction: "up" | "down") => void;
   onReorderTrack: (fromIndex: number, toIndex: number) => void;
   onPlayNow: (trackId: string) => void;
+  onClearQueue: () => void;
+  onDeduplicateQueue: () => void;
 }
 
 export function Queue({
@@ -47,10 +50,13 @@ export function Queue({
   onMoveTrack,
   onReorderTrack,
   onPlayNow,
+  onClearQueue,
+  onDeduplicateQueue,
 }: QueueProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const totalQueueSeconds = queue.reduce((sum, t) => sum + (t.duration || 0), 0);
 
@@ -187,7 +193,39 @@ export function Queue({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {queue.length > 1 && (
+              <button
+                onClick={onDeduplicateQueue}
+                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white rounded-full border border-white/10 transition-colors cursor-pointer"
+                title="Kuyruktaki aynı şarkıları kaldır"
+              >
+                <CopyMinus className="w-3 h-3 text-sky-400" />
+                <span className="hidden sm:inline">Tekrarları Sil</span>
+              </button>
+            )}
+            {queue.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirmClear) {
+                    onClearQueue();
+                    setConfirmClear(false);
+                  } else {
+                    setConfirmClear(true);
+                    window.setTimeout(() => setConfirmClear(false), 3000);
+                  }
+                }}
+                className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 rounded-full border transition-colors cursor-pointer ${
+                  confirmClear
+                    ? "bg-red-500/20 text-red-300 border-red-500/40"
+                    : "bg-white/5 hover:bg-red-500/15 text-neutral-300 hover:text-red-300 border-white/10"
+                }`}
+                title="Kuyruğu Temizle"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>{confirmClear ? "Emin misin?" : "Temizle"}</span>
+              </button>
+            )}
             {queue.length > 0 && (
               <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-0.5 bg-white/5 text-neutral-300 rounded-full border border-white/5">
                 <Clock className="w-3 h-3 text-red-400" />

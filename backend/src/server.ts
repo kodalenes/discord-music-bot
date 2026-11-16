@@ -4,6 +4,7 @@ import express from "express";
 import { Server, type Socket } from "socket.io";
 import { config } from "./config.js";
 import type { MusicManager } from "./music/MusicManager.js";
+import { LikedTracksStore } from "./music/LikedTracksStore.js";
 import { SavedPlaylistsStore } from "./music/SavedPlaylistsStore.js";
 import { YoutubeBrowseService } from "./music/YoutubeBrowseService.js";
 import type {
@@ -29,6 +30,7 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
   const app = express();
   const browseService = new YoutubeBrowseService();
   const playlistsStore = new SavedPlaylistsStore();
+  const likesStore = new LikedTracksStore();
 
   app.use(
     cors({
@@ -109,6 +111,7 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
     // Send initial state immediately on connect
     socket.emit("state:sync", manager.getState());
     socket.emit("playlists:updated", playlistsStore.list());
+    socket.emit("likes:updated", likesStore.list());
     socket.emit("stats:updated", manager.getStats());
     broadcastUsers();
 
@@ -442,6 +445,67 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
           playlists: [],
         });
       }
+    });
+
+    socket.on("track:playNext", async (payload, callback) => {
+      try {
+        const uri = typeof payload === "string" ? payload : payload.uri;
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        const requester =
+          typeof payload === "string" ? nick : (payload.requester ?? nick);
+        await manager.addTrack(uri, requester, true);
+        emitActivity(`${nick} bir şarkıyı sıranın en başına ekledi`);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to queue track next.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
+    socket.on("queue:clear", (callback) => {
+      try {
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        manager.clearQueue();
+        emitActivity(`${nick} kuyruğu temizledi`);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to clear queue.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, error: message });
+      }
+    });
+
+    socket.on("queue:deduplicate", (callback) => {
+      try {
+        const nick = connectedUsers.get(socket.id) ?? "Misafir";
+        const removedCount = manager.deduplicateQueue();
+        if (removedCount > 0) {
+          emitActivity(`${nick} kuyruktaki ${removedCount} tekrar şarkıyı kaldırdı`);
+        }
+        callback?.({ ok: true, removedCount });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to deduplicate queue.";
+        socket.emit("error", { message });
+        callback?.({ ok: false, removedCount: 0, error: message });
+      }
+    });
+
+    socket.on("likes:list", (callback) => {
+      callback(likesStore.list());
+    });
+
+    socket.on("likes:toggle", (track, callback) => {
+      const result = likesStore.toggle(track);
+      io.emit("likes:updated", result.items);
+      const nick = connectedUsers.get(socket.id) ?? "Misafir";
+      if (result.liked) {
+        emitActivity(`${nick} "${track.title}" şarkısını beğendi ♥`);
+      }
+      callback?.(result);
     });
 
     socket.on("stats:get", (callback) => {

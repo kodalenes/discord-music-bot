@@ -1,6 +1,7 @@
 import {
   Flame,
   ListMusic,
+  ListPlus,
   Loader2,
   Play,
   Plus,
@@ -16,6 +17,7 @@ interface ExploreViewProps {
   isLoading: boolean;
   onRefresh: () => void;
   onPlayNow: (uri: string) => void;
+  onPlayNext: (uri: string) => void;
   onAddTrack: (uri: string) => void;
   onOpenPlaylist: (id: string, isAlbum: boolean) => void;
 }
@@ -24,6 +26,7 @@ interface ExploreTrackCardProps {
   track: SearchResult & { reason?: string };
   reasonTone?: "amber" | "sky";
   onPlayNow: (uri: string) => void;
+  onPlayNext: (uri: string) => void;
   onAddTrack: (uri: string) => void;
 }
 
@@ -31,6 +34,7 @@ function ExploreTrackCard({
   track,
   reasonTone = "amber",
   onPlayNow,
+  onPlayNext,
   onAddTrack,
 }: ExploreTrackCardProps) {
   const badgeClass =
@@ -79,13 +83,22 @@ function ExploreTrackCard({
         )}
       </button>
 
-      <button
-        onClick={() => onAddTrack(track.uri)}
-        className="p-2 rounded-full bg-white/10 hover:bg-white text-white hover:text-black transition-all cursor-pointer shrink-0"
-        title="Kuyruğa Ekle"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => onPlayNext(track.uri)}
+          className="p-2 rounded-full bg-white/5 hover:bg-white/20 text-neutral-300 hover:text-white transition-all cursor-pointer"
+          title="Sıradaki Olarak Çal"
+        >
+          <ListPlus className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => onAddTrack(track.uri)}
+          className="p-2 rounded-full bg-white/10 hover:bg-white text-white hover:text-black transition-all cursor-pointer"
+          title="Kuyruğa Ekle"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -95,6 +108,7 @@ export function ExploreView({
   isLoading,
   onRefresh,
   onPlayNow,
+  onPlayNext,
   onAddTrack,
   onOpenPlaylist,
 }: ExploreViewProps) {
@@ -151,6 +165,7 @@ export function ExploreView({
                 track={track}
                 reasonTone="amber"
                 onPlayNow={onPlayNow}
+                onPlayNext={onPlayNext}
                 onAddTrack={onAddTrack}
               />
             ))}
@@ -180,6 +195,7 @@ export function ExploreView({
                 track={track}
                 reasonTone="sky"
                 onPlayNow={onPlayNow}
+                onPlayNext={onPlayNext}
                 onAddTrack={onAddTrack}
               />
             ))}
@@ -207,6 +223,7 @@ export function ExploreView({
                 key={`t-${track.id}`}
                 track={track}
                 onPlayNow={onPlayNow}
+                onPlayNext={onPlayNext}
                 onAddTrack={onAddTrack}
               />
             ))}

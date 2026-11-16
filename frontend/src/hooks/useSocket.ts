@@ -7,6 +7,7 @@ import type {
   BrowseSearchResult,
   ConnectedUser,
   ExploreFeed,
+  LikedTrack,
   ListeningStats,
   LoopMode,
   LyricsResult,
@@ -42,6 +43,7 @@ const INITIAL_PLAYER_STATE: PlayerState = {
 export function useSocket(pin: string | null, nickname: string) {
   const [playerState, setPlayerState] = useState<PlayerState>(INITIAL_PLAYER_STATE);
   const [savedPlaylists, setSavedPlaylists] = useState<SavedPlaylist[]>([]);
+  const [likedTracks, setLikedTracks] = useState<LikedTrack[]>([]);
   const [stats, setStats] = useState<ListeningStats>(INITIAL_STATS);
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
   const [notices, setNotices] = useState<ActivityNotice[]>([]);
@@ -75,6 +77,9 @@ export function useSocket(pin: string | null, nickname: string) {
       socket.emit("playlists:list", (items) => {
         if (Array.isArray(items)) setSavedPlaylists(items);
       });
+      socket.emit("likes:list", (items) => {
+        if (Array.isArray(items)) setLikedTracks(items);
+      });
       socket.emit("stats:get", (s) => {
         if (s) setStats(s);
       });
@@ -98,6 +103,10 @@ export function useSocket(pin: string | null, nickname: string) {
 
     const onPlaylistsUpdated = (items: SavedPlaylist[]) => {
       setSavedPlaylists(items);
+    };
+
+    const onLikesUpdated = (items: LikedTrack[]) => {
+      setLikedTracks(items);
     };
 
     const onUsersUpdated = (users: ConnectedUser[]) => {
@@ -124,6 +133,7 @@ export function useSocket(pin: string | null, nickname: string) {
     socket.on("connect_error", onConnectError);
     socket.on("state:sync", onStateSync);
     socket.on("playlists:updated", onPlaylistsUpdated);
+    socket.on("likes:updated", onLikesUpdated);
     socket.on("users:updated", onUsersUpdated);
     socket.on("activity:notice", onActivityNotice);
     socket.on("stats:updated", onStatsUpdated);
@@ -135,6 +145,7 @@ export function useSocket(pin: string | null, nickname: string) {
       socket.off("connect_error", onConnectError);
       socket.off("state:sync", onStateSync);
       socket.off("playlists:updated", onPlaylistsUpdated);
+      socket.off("likes:updated", onLikesUpdated);
       socket.off("users:updated", onUsersUpdated);
       socket.off("activity:notice", onActivityNotice);
       socket.off("stats:updated", onStatsUpdated);
@@ -357,6 +368,35 @@ export function useSocket(pin: string | null, nickname: string) {
     socket.emit("playlists:delete", id);
   }, []);
 
+  const playNextTrack = useCallback(
+    (payload: string | { uri: string; requester?: string }) => {
+      socket.emit("track:playNext", payload);
+    },
+    []
+  );
+
+  const clearQueue = useCallback(() => {
+    socket.emit("queue:clear");
+  }, []);
+
+  const deduplicateQueue = useCallback(() => {
+    socket.emit("queue:deduplicate");
+  }, []);
+
+  const toggleLike = useCallback(
+    (track: {
+      id?: string;
+      title: string;
+      artist: string;
+      thumbnail: string;
+      uri: string;
+      duration: number;
+    }) => {
+      socket.emit("likes:toggle", track);
+    },
+    []
+  );
+
   const getLyrics = useCallback(
     (payload: {
       uri?: string;
@@ -375,6 +415,7 @@ export function useSocket(pin: string | null, nickname: string) {
   return {
     playerState,
     savedPlaylists,
+    likedTracks,
     stats,
     connectedUsers,
     notices,
@@ -389,6 +430,10 @@ export function useSocket(pin: string | null, nickname: string) {
     addTrack,
     addTracks,
     playNow,
+    playNextTrack,
+    clearQueue,
+    deduplicateQueue,
+    toggleLike,
     removeTrack,
     moveTrack,
     reorderTrack,
