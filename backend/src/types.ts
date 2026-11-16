@@ -227,7 +227,12 @@ export interface ClientToServerEvents {
   ) => void;
   "player:volume": (volume: number, callback?: (ack: ActionAck) => void) => void;
   "user:setNickname": (nickname: string) => void;
-  "browse:explore": (callback: (feed: ExploreFeed) => void) => void;
+  "browse:explore": (
+    optionsOrCallback:
+      | { force?: boolean }
+      | ((feed: ExploreFeed) => void),
+    callback?: (feed: ExploreFeed) => void
+  ) => void;
   "browse:search": (
     query: string,
     callback: (results: BrowseSearchResult) => void

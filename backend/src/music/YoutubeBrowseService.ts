@@ -11,7 +11,10 @@ import type {
   SearchTrackResult,
   SyncedLyricLine,
 } from "../types.js";
-import type { ListeningAnalysisProfile } from "./StatsStore.js";
+import {
+  normalizeMetaKey,
+  type ListeningAnalysisProfile,
+} from "./StatsStore.js";
 
 interface RawThumb {
   url?: string;
@@ -530,26 +533,37 @@ export class YoutubeBrowseService {
   }
 
   public async getExploreFeed(
-    analysis?: ListeningAnalysisProfile
+    analysis?: ListeningAnalysisProfile,
+    force = false
   ): Promise<ExploreFeed> {
     const [base, personalizedTracks] = await Promise.all([
-      this.getBaseExploreFeed(),
-      this.getPersonalizedRecommendations(analysis),
+      this.getBaseExploreFeed(force),
+      this.getPersonalizedRecommendations(analysis, force),
     ]);
+
+    const excludedIds = analysis?.sessionExcludedIds ?? new Set<string>();
+    const excludedMeta =
+      analysis?.sessionExcludedMetaKeys ?? new Set<string>();
+
+    const trendingTracks = base.trendingTracks.filter(
+      (t) =>
+        !excludedIds.has(t.id) &&
+        !excludedMeta.has(normalizeMetaKey(t.title, t.artist))
+    );
 
     return {
       personalizedTracks,
       rediscoverTracks: analysis?.rediscoverTracks ?? [],
-      trendingTracks: base.trendingTracks,
+      trendingTracks,
       playlists: base.playlists,
     };
   }
 
-  private async getBaseExploreFeed(): Promise<{
+  private async getBaseExploreFeed(force = false): Promise<{
     trendingTracks: SearchTrackResult[];
     playlists: PlaylistSearchResult[];
   }> {
-    if (this.exploreCache && Date.now() < this.exploreCache.expiresAt) {
+    if (!force && this.exploreCache && Date.now() < this.exploreCache.expiresAt) {
       return this.exploreCache.data;
     }
 
@@ -616,7 +630,8 @@ export class YoutubeBrowseService {
   }
 
   private async getPersonalizedRecommendations(
-    analysis?: ListeningAnalysisProfile
+    analysis?: ListeningAnalysisProfile,
+    force = false
   ): Promise<PersonalizedTrackRecommendation[]> {
     if (!analysis || analysis.seedTracks.length === 0) {
       return [];
@@ -624,15 +639,25 @@ export class YoutubeBrowseService {
 
     const cacheKey = `${analysis.currentBucket}:${analysis.seedTracks.map((s) => s.key).join(",")}`;
     if (
+      !force &&
       this.personalizedCache &&
       this.personalizedCache.key === cacheKey &&
       Date.now() < this.personalizedCache.expiresAt
     ) {
-      return this.personalizedCache.tracks;
+      return this.personalizedCache.tracks.filter(
+        (t) =>
+          !analysis.sessionExcludedIds.has(t.id) &&
+          !analysis.sessionExcludedMetaKeys.has(
+            normalizeMetaKey(t.title, t.artist)
+          )
+      );
     }
 
     const yt = await this.getClient();
-    const seenIds = new Set<string>(analysis.skippedVideoIds);
+    const seenIds = new Set<string>([
+      ...analysis.skippedVideoIds,
+      ...analysis.sessionExcludedIds,
+    ]);
     for (const seed of analysis.seedTracks) {
       if (seed.videoId) seenIds.add(seed.videoId);
     }
@@ -660,6 +685,13 @@ export class YoutubeBrowseService {
       const { seed, items } = res.value;
       for (const item of items) {
         if (!item.id || seenIds.has(item.id)) continue;
+        if (
+          analysis.sessionExcludedMetaKeys.has(
+            normalizeMetaKey(item.title, item.artist)
+          )
+        ) {
+          continue;
+        }
         seenIds.add(item.id);
 
         const artistKey = item.artist.trim().toLowerCase();
@@ -677,6 +709,15 @@ export class YoutubeBrowseService {
           familiarCandidates.push(rec);
         } else {
           freshCandidates.push(rec);
+        }
+      }
+    }
+
+    if (force) {
+      for (const arr of [freshCandidates, familiarCandidates]) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
         }
       }
     }

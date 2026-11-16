@@ -428,17 +428,26 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       }
     });
 
-    socket.on("browse:explore", async (callback) => {
+    socket.on("browse:explore", async (optionsOrCallback, maybeCallback) => {
+      const callback =
+        typeof optionsOrCallback === "function"
+          ? optionsOrCallback
+          : maybeCallback;
+      const force =
+        typeof optionsOrCallback === "object" && optionsOrCallback !== null
+          ? Boolean(optionsOrCallback.force)
+          : false;
+
       try {
         const analysis = manager.getAnalysisProfile();
-        const feed = await browseService.getExploreFeed(analysis);
-        callback(feed);
+        const feed = await browseService.getExploreFeed(analysis, force);
+        callback?.(feed);
       } catch (err) {
         console.error(
           "[Socket.io] browse:explore error:",
           err instanceof Error ? err.message : err
         );
-        callback({
+        callback?.({
           personalizedTracks: [],
           rediscoverTracks: [],
           trendingTracks: [],

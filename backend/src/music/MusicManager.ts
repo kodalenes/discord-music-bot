@@ -25,7 +25,12 @@ import type {
   SearchTrackResult,
   VoiceChannelInfo,
 } from "../types.js";
-import { StatsStore, type ListeningAnalysisProfile } from "./StatsStore.js";
+import {
+  extractVideoId,
+  normalizeMetaKey,
+  StatsStore,
+  type ListeningAnalysisProfile,
+} from "./StatsStore.js";
 import { YoutubeBrowseService } from "./YoutubeBrowseService.js";
 
 const URL_REGEX = /^https?:\/\//i;
@@ -881,7 +886,19 @@ export class MusicManager {
   }
 
   public getAnalysisProfile(): ListeningAnalysisProfile {
-    return this.statsStore.getAnalysisProfile();
+    const videoIds = new Set<string>();
+    const metaKeys = new Set<string>();
+    const sessionTracks = [
+      ...(this.currentTrack ? [this.currentTrack] : []),
+      ...this.queue,
+      ...this.history,
+    ];
+    for (const track of sessionTracks) {
+      const vid = extractVideoId(track.uri);
+      if (vid) videoIds.add(vid);
+      metaKeys.add(normalizeMetaKey(track.title, track.artist));
+    }
+    return this.statsStore.getAnalysisProfile({ videoIds, metaKeys });
   }
 
   private emitState(): void {

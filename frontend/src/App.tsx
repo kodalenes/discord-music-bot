@@ -187,7 +187,7 @@ export default function App() {
     async (force = false) => {
       if (!force && exploreFeed) return;
       setIsLoadingExplore(true);
-      const feed = await getExploreFeed();
+      const feed = await getExploreFeed(force);
       setExploreFeed(feed);
       setIsLoadingExplore(false);
     },

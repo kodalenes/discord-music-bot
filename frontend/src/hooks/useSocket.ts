@@ -249,7 +249,7 @@ export function useSocket(pin: string | null, nickname: string) {
     socket.emit("user:setNickname", nextNick);
   }, []);
 
-  const getExploreFeed = useCallback((): Promise<ExploreFeed> => {
+  const getExploreFeed = useCallback((force = false): Promise<ExploreFeed> => {
     return new Promise((resolve) => {
       let settled = false;
       const timer = window.setTimeout(() => {
@@ -264,7 +264,7 @@ export function useSocket(pin: string | null, nickname: string) {
         }
       }, 8000);
 
-      socket.emit("browse:explore", (feed) => {
+      socket.emit("browse:explore", { force }, (feed) => {
         if (!settled) {
           settled = true;
           window.clearTimeout(timer);

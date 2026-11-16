@@ -46,6 +46,8 @@ export interface ListeningAnalysisProfile {
   seedTracks: SeedTrackAnalysis[];
   rediscoverTracks: PersonalizedTrackRecommendation[];
   skippedVideoIds: Set<string>;
+  sessionExcludedIds: Set<string>;
+  sessionExcludedMetaKeys: Set<string>;
   allTrackedVideoIds: Set<string>;
   topArtists: string[];
   currentBucket: TimeBucket;
@@ -81,7 +83,7 @@ function getBucketLabelTr(bucket: TimeBucket): string {
   }
 }
 
-function extractVideoId(uri?: string): string | null {
+export function extractVideoId(uri?: string): string | null {
   if (!uri) return null;
   try {
     const parsed = new URL(uri);
@@ -97,12 +99,16 @@ function extractVideoId(uri?: string): string | null {
   return null;
 }
 
+export function normalizeMetaKey(title: string, artist: string): string {
+  return `${title.trim().toLowerCase()}::${artist.trim().toLowerCase()}`;
+}
+
 function extractTrackKey(track: QueueTrack): string {
   const uri = track.uri?.trim() ?? "";
   const videoId = extractVideoId(uri);
   if (videoId) return `yt:${videoId}`;
   if (uri) return `uri:${uri}`;
-  return `meta:${track.title.trim().toLowerCase()}::${track.artist.trim().toLowerCase()}`;
+  return `meta:${normalizeMetaKey(track.title, track.artist)}`;
 }
 
 function normalizeArtistDisplay(artist: string): string {
@@ -273,7 +279,13 @@ export class StatsStore {
     this.saveToDisk();
   }
 
-  public getAnalysisProfile(): ListeningAnalysisProfile {
+  public getAnalysisProfile(sessionExcluded?: {
+    videoIds: Set<string>;
+    metaKeys: Set<string>;
+  }): ListeningAnalysisProfile {
+    const sessionExcludedIds = sessionExcluded?.videoIds ?? new Set<string>();
+    const sessionExcludedMetaKeys =
+      sessionExcluded?.metaKeys ?? new Set<string>();
     const now = Date.now();
     const currentBucket = getTimeBucket(new Date(now));
     const bucketLabel = getBucketLabelTr(currentBucket);
@@ -344,7 +356,18 @@ export class StatsStore {
       }));
 
     const rediscoverTracks: PersonalizedTrackRecommendation[] = scored
-      .filter((s) => s.rediscoverScore > 0 && Boolean(s.track.uri))
+      .filter((s) => {
+        if (s.rediscoverScore <= 0 || !s.track.uri) return false;
+        if (s.videoId && sessionExcludedIds.has(s.videoId)) return false;
+        if (
+          sessionExcludedMetaKeys.has(
+            normalizeMetaKey(s.track.title, s.track.artist)
+          )
+        ) {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => b.rediscoverScore - a.rediscoverScore)
       .slice(0, 8)
       .map((s) => {
@@ -376,6 +399,8 @@ export class StatsStore {
       seedTracks,
       rediscoverTracks,
       skippedVideoIds,
+      sessionExcludedIds,
+      sessionExcludedMetaKeys,
       allTrackedVideoIds,
       topArtists,
       currentBucket,
