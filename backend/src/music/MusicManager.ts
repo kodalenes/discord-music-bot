@@ -17,6 +17,7 @@ import {
 import { config } from "../config.js";
 import type {
   AudioFilterPreset,
+  LikedTrack,
   ListeningStats,
   LoopMode,
   PlayerState,
@@ -885,7 +886,18 @@ export class MusicManager {
     return this.statsStore.getSummary();
   }
 
-  public getAnalysisProfile(): ListeningAnalysisProfile {
+  public dismissRecommendation(track: {
+    id?: string;
+    title: string;
+    artist: string;
+    uri?: string;
+  }): void {
+    this.statsStore.dismissTrack(track);
+  }
+
+  public getAnalysisProfile(
+    likedTracks?: LikedTrack[]
+  ): ListeningAnalysisProfile {
     const videoIds = new Set<string>();
     const metaKeys = new Set<string>();
     const sessionTracks = [
@@ -898,7 +910,10 @@ export class MusicManager {
       if (vid) videoIds.add(vid);
       metaKeys.add(normalizeMetaKey(track.title, track.artist));
     }
-    return this.statsStore.getAnalysisProfile({ videoIds, metaKeys });
+    return this.statsStore.getAnalysisProfile({
+      sessionExcluded: { videoIds, metaKeys },
+      likedTracks,
+    });
   }
 
   private emitState(): void {

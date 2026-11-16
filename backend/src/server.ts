@@ -439,7 +439,7 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
           : false;
 
       try {
-        const analysis = manager.getAnalysisProfile();
+        const analysis = manager.getAnalysisProfile(likesStore.list());
         const feed = await browseService.getExploreFeed(analysis, force);
         callback?.(feed);
       } catch (err) {
@@ -453,6 +453,17 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
           trendingTracks: [],
           playlists: [],
         });
+      }
+    });
+
+    socket.on("explore:dismiss", (track, callback) => {
+      try {
+        manager.dismissRecommendation(track);
+        callback?.({ ok: true });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to dismiss track.";
+        callback?.({ ok: false, error: message });
       }
     });
 

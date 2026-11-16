@@ -30,4 +30,5 @@ export const config = {
     password: process.env.LAVALINK_PASSWORD?.trim() || "youshallnotpass",
   },
   appAccessPin: requireEnv("APP_ACCESS_PIN"),
+  lastfmApiKey: process.env.LASTFM_API_KEY?.trim() || "",
 } as const;

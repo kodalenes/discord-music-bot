@@ -283,6 +283,10 @@ export interface ClientToServerEvents {
     },
     callback?: (res: { liked: boolean; items: LikedTrack[] }) => void
   ) => void;
+  "explore:dismiss": (
+    track: { id?: string; title: string; artist: string; uri?: string },
+    callback?: (ack: ActionAck) => void
+  ) => void;
 }
 
 export interface ServerToClientEvents {

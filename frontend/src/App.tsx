@@ -86,6 +86,7 @@ export default function App() {
     clearQueue,
     deduplicateQueue,
     toggleLike,
+    dismissExploreTrack,
     removeTrack,
     moveTrack,
     reorderTrack,
@@ -623,6 +624,22 @@ export default function App() {
             onPlayNow={(uri) => void playNow({ uri })}
             onPlayNext={(uri) => playNextTrack({ uri })}
             onAddTrack={(uri) => addTrack({ uri })}
+            onDismissTrack={(track) => {
+              dismissExploreTrack(track);
+              setExploreFeed((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      personalizedTracks: prev.personalizedTracks.filter(
+                        (t) => t.id !== track.id
+                      ),
+                      rediscoverTracks: prev.rediscoverTracks.filter(
+                        (t) => t.id !== track.id
+                      ),
+                    }
+                  : prev
+              );
+            }}
             onOpenPlaylist={(id, isAlbum) =>
               void handleOpenPlaylist(id, isAlbum)
             }

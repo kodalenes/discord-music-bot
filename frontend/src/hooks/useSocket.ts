@@ -397,6 +397,13 @@ export function useSocket(pin: string | null, nickname: string) {
     []
   );
 
+  const dismissExploreTrack = useCallback(
+    (track: { id?: string; title: string; artist: string; uri?: string }) => {
+      socket.emit("explore:dismiss", track);
+    },
+    []
+  );
+
   const getLyrics = useCallback(
     (payload: {
       uri?: string;
@@ -434,6 +441,7 @@ export function useSocket(pin: string | null, nickname: string) {
     clearQueue,
     deduplicateQueue,
     toggleLike,
+    dismissExploreTrack,
     removeTrack,
     moveTrack,
     reorderTrack,

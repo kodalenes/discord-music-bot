@@ -8,6 +8,7 @@ import {
   RefreshCw,
   RotateCcw,
   Sparkles,
+  X,
 } from "lucide-react";
 import type { ExploreFeed, SearchResult } from "../types";
 import { formatDuration } from "../utils";
@@ -19,6 +20,7 @@ interface ExploreViewProps {
   onPlayNow: (uri: string) => void;
   onPlayNext: (uri: string) => void;
   onAddTrack: (uri: string) => void;
+  onDismissTrack?: (track: SearchResult) => void;
   onOpenPlaylist: (id: string, isAlbum: boolean) => void;
 }
 
@@ -28,6 +30,7 @@ interface ExploreTrackCardProps {
   onPlayNow: (uri: string) => void;
   onPlayNext: (uri: string) => void;
   onAddTrack: (uri: string) => void;
+  onDismiss?: (track: SearchResult) => void;
 }
 
 function ExploreTrackCard({
@@ -36,6 +39,7 @@ function ExploreTrackCard({
   onPlayNow,
   onPlayNext,
   onAddTrack,
+  onDismiss,
 }: ExploreTrackCardProps) {
   const badgeClass =
     reasonTone === "sky"
@@ -98,6 +102,15 @@ function ExploreTrackCard({
         >
           <Plus className="w-4 h-4" />
         </button>
+        {onDismiss && (
+          <button
+            onClick={() => onDismiss(track)}
+            className="p-1.5 rounded-full text-neutral-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer sm:opacity-0 sm:group-hover:opacity-100"
+            title="İlgilenmiyorum (bir daha gösterme)"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -110,6 +123,7 @@ export function ExploreView({
   onPlayNow,
   onPlayNext,
   onAddTrack,
+  onDismissTrack,
   onOpenPlaylist,
 }: ExploreViewProps) {
   if (isLoading) {
@@ -167,6 +181,7 @@ export function ExploreView({
                 onPlayNow={onPlayNow}
                 onPlayNext={onPlayNext}
                 onAddTrack={onAddTrack}
+                onDismiss={onDismissTrack}
               />
             ))}
           </div>
@@ -197,6 +212,7 @@ export function ExploreView({
                 onPlayNow={onPlayNow}
                 onPlayNext={onPlayNext}
                 onAddTrack={onAddTrack}
+                onDismiss={onDismissTrack}
               />
             ))}
           </div>

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  LikedTrack,
   ListeningStats,
   PersonalizedTrackRecommendation,
   QueueTrack,
@@ -29,6 +30,8 @@ interface RawStatsData {
   tracks: Record<string, StoredTrackStat>;
   artists: Record<string, TopArtistStat>;
   requesters: Record<string, TopRequesterStat>;
+  dismissedIds?: string[];
+  dismissedMetaKeys?: string[];
   updatedAt: number;
 }
 
@@ -46,6 +49,8 @@ export interface ListeningAnalysisProfile {
   seedTracks: SeedTrackAnalysis[];
   rediscoverTracks: PersonalizedTrackRecommendation[];
   skippedVideoIds: Set<string>;
+  dismissedIds: Set<string>;
+  dismissedMetaKeys: Set<string>;
   sessionExcludedIds: Set<string>;
   sessionExcludedMetaKeys: Set<string>;
   allTrackedVideoIds: Set<string>;
@@ -153,6 +158,12 @@ export class StatsStore {
             parsed.requesters && typeof parsed.requesters === "object"
               ? parsed.requesters
               : {},
+          dismissedIds: Array.isArray(parsed.dismissedIds)
+            ? parsed.dismissedIds
+            : [],
+          dismissedMetaKeys: Array.isArray(parsed.dismissedMetaKeys)
+            ? parsed.dismissedMetaKeys
+            : [],
           updatedAt:
             typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
         };
@@ -279,13 +290,50 @@ export class StatsStore {
     this.saveToDisk();
   }
 
-  public getAnalysisProfile(sessionExcluded?: {
-    videoIds: Set<string>;
-    metaKeys: Set<string>;
+  public dismissTrack(track: {
+    id?: string;
+    title: string;
+    artist: string;
+    uri?: string;
+  }): void {
+    const dismissedIds = new Set(this.data.dismissedIds ?? []);
+    const dismissedMetaKeys = new Set(this.data.dismissedMetaKeys ?? []);
+
+    const vid = extractVideoId(track.uri);
+    if (vid) dismissedIds.add(vid);
+    if (track.id && !track.id.includes(" ")) dismissedIds.add(track.id);
+    dismissedMetaKeys.add(normalizeMetaKey(track.title, track.artist));
+
+    this.data.dismissedIds = Array.from(dismissedIds).slice(-500);
+    this.data.dismissedMetaKeys = Array.from(dismissedMetaKeys).slice(-500);
+    this.data.updatedAt = Date.now();
+    this.saveToDisk();
+  }
+
+  public getAnalysisProfile(options?: {
+    sessionExcluded?: {
+      videoIds: Set<string>;
+      metaKeys: Set<string>;
+    };
+    likedTracks?: LikedTrack[];
   }): ListeningAnalysisProfile {
-    const sessionExcludedIds = sessionExcluded?.videoIds ?? new Set<string>();
+    const sessionExcludedIds =
+      options?.sessionExcluded?.videoIds ?? new Set<string>();
     const sessionExcludedMetaKeys =
-      sessionExcluded?.metaKeys ?? new Set<string>();
+      options?.sessionExcluded?.metaKeys ?? new Set<string>();
+    const dismissedIds = new Set<string>(this.data.dismissedIds ?? []);
+    const dismissedMetaKeys = new Set<string>(
+      this.data.dismissedMetaKeys ?? []
+    );
+
+    const likedVideoIds = new Set<string>();
+    const likedMetaKeys = new Set<string>();
+    for (const lt of options?.likedTracks ?? []) {
+      const vid = extractVideoId(lt.uri);
+      if (vid) likedVideoIds.add(vid);
+      likedMetaKeys.add(normalizeMetaKey(lt.title, lt.artist));
+    }
+
     const now = Date.now();
     const currentBucket = getTimeBucket(new Date(now));
     const bucketLabel = getBucketLabelTr(currentBucket);
@@ -293,39 +341,61 @@ export class StatsStore {
 
     const skippedVideoIds = new Set<string>();
     const allTrackedVideoIds = new Set<string>();
+    const seenSeedMetaKeys = new Set<string>();
 
     const scored = allTracks.map((t) => {
       const videoId = extractVideoId(t.uri);
       if (videoId) allTrackedVideoIds.add(videoId);
+      const metaKey = normalizeMetaKey(t.title, t.artist);
+      seenSeedMetaKeys.add(metaKey);
 
       const skips = t.skipCount ?? 0;
       const completions = t.completedCount ?? 0;
       const daysSince = Math.max(0, (now - t.lastPlayedAt) / (1000 * 60 * 60 * 24));
+      const isLiked =
+        (videoId !== null && likedVideoIds.has(videoId)) ||
+        likedMetaKeys.has(metaKey);
+      const isDismissed =
+        (videoId !== null && dismissedIds.has(videoId)) ||
+        dismissedMetaKeys.has(metaKey);
 
       if (videoId && skips >= 2 && skips > completions) {
         skippedVideoIds.add(videoId);
       }
 
-      // Frequency + completion reward - skip penalty
-      const baseAffinity = t.playCount * 2 + completions * 1.5 - skips * 2.5;
+      // Frequency + completion + liked bonus - skip penalty
+      const likedBoost = isLiked ? 6 : 0;
+      const baseAffinity =
+        t.playCount * 2 + completions * 1.5 + likedBoost - skips * 2.5;
       // Time-of-day match boost
       const bucketCount = t.timeBuckets?.[currentBucket] ?? 0;
       const timeBoost = bucketCount > 0 ? Math.min(4, bucketCount * 1.2) : 0;
       // Recency decay (still keeps all-time favorites strong)
       const recencyFactor = 1 / (1 + daysSince * 0.05);
 
-      const seedScore = Math.max(0, (baseAffinity + timeBoost) * (0.65 + 0.35 * recencyFactor));
+      const seedScore = isDismissed
+        ? 0
+        : Math.max(
+            0,
+            (baseAffinity + timeBoost) * (0.65 + 0.35 * recencyFactor)
+          );
 
-      // Rediscovery score: played multiple times, low skips, not played very recently
+      // Rediscovery score: played multiple times (or liked), low skips, not played very recently
       const skipRatio = t.playCount > 0 ? skips / t.playCount : 0;
       const isGoodRediscoverCandidate =
-        skipRatio < 0.5 && (daysSince >= 1 || allTracks.length <= 12);
+        !isDismissed &&
+        skipRatio < 0.5 &&
+        (daysSince >= 1 || allTracks.length <= 12);
       const rediscoverScore = isGoodRediscoverCandidate
-        ? t.playCount * (1 + Math.min(14, daysSince) * 0.35) + completions
+        ? t.playCount * (1 + Math.min(14, daysSince) * 0.35) +
+          completions +
+          (isLiked ? 4 : 0)
         : 0;
 
       let reason = `${t.title} dinlediğin için`;
-      if (bucketCount >= 2) {
+      if (isLiked) {
+        reason = `Beğendiğin ${t.title} tarzında`;
+      } else if (bucketCount >= 2) {
         reason = `${bucketLabel} favorin ${t.title} tarzında`;
       } else if (completions >= 2) {
         reason = `Sık dinlediğin ${t.title} benzeri`;
@@ -340,6 +410,34 @@ export class StatsStore {
         reason,
       };
     });
+
+    // Also include liked tracks that aren't in stats.json yet as seeds
+    for (const lt of options?.likedTracks ?? []) {
+      const metaKey = normalizeMetaKey(lt.title, lt.artist);
+      if (seenSeedMetaKeys.has(metaKey)) continue;
+      const videoId = extractVideoId(lt.uri);
+      if (videoId && dismissedIds.has(videoId)) continue;
+      if (dismissedMetaKeys.has(metaKey)) continue;
+      if (videoId) allTrackedVideoIds.add(videoId);
+
+      scored.push({
+        track: {
+          key: lt.id,
+          title: lt.title,
+          artist: lt.artist,
+          thumbnail: lt.thumbnail,
+          uri: lt.uri,
+          duration: lt.duration,
+          playCount: 1,
+          lastPlayedAt: lt.likedAt,
+        },
+        videoId,
+        seedScore: 7.5,
+        rediscoverScore: 0,
+        daysSince: 0,
+        reason: `Beğendiğin ${lt.title} tarzında`,
+      });
+    }
 
     const seedTracks: SeedTrackAnalysis[] = scored
       .filter((s) => s.seedScore > 0 && (s.videoId !== null || Boolean(s.track.uri)))
@@ -399,6 +497,8 @@ export class StatsStore {
       seedTracks,
       rediscoverTracks,
       skippedVideoIds,
+      dismissedIds,
+      dismissedMetaKeys,
       sessionExcludedIds,
       sessionExcludedMetaKeys,
       allTrackedVideoIds,

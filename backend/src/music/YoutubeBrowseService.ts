@@ -11,6 +11,7 @@ import type {
   SearchTrackResult,
   SyncedLyricLine,
 } from "../types.js";
+import { LastFmService } from "./LastFmService.js";
 import {
   normalizeMetaKey,
   type ListeningAnalysisProfile,
@@ -148,6 +149,7 @@ export function extractPlaylistId(input: string): string {
 
 export class YoutubeBrowseService {
   private ytPromise: Promise<Innertube> | null = null;
+  private readonly lastFm = new LastFmService();
   private lyricsCache = new Map<string, LyricsResult | null>();
   private lyricsInFlight = new Map<string, Promise<LyricsResult | null>>();
   private exploreCache: {
@@ -542,9 +544,14 @@ export class YoutubeBrowseService {
       this.getPersonalizedRecommendations(analysis, force),
     ]);
 
-    const excludedIds = analysis?.sessionExcludedIds ?? new Set<string>();
-    const excludedMeta =
-      analysis?.sessionExcludedMetaKeys ?? new Set<string>();
+    const excludedIds = new Set<string>([
+      ...(analysis?.sessionExcludedIds ?? []),
+      ...(analysis?.dismissedIds ?? []),
+    ]);
+    const excludedMeta = new Set<string>([
+      ...(analysis?.sessionExcludedMetaKeys ?? []),
+      ...(analysis?.dismissedMetaKeys ?? []),
+    ]);
 
     const trendingTracks = base.trendingTracks.filter(
       (t) =>
@@ -646,6 +653,16 @@ export class YoutubeBrowseService {
       return [];
     }
 
+    const excludedIds = new Set<string>([
+      ...analysis.skippedVideoIds,
+      ...analysis.dismissedIds,
+      ...analysis.sessionExcludedIds,
+    ]);
+    const excludedMeta = new Set<string>([
+      ...analysis.dismissedMetaKeys,
+      ...analysis.sessionExcludedMetaKeys,
+    ]);
+
     const cacheKey = `${analysis.currentBucket}:${analysis.seedTracks.map((s) => s.key).join(",")}`;
     if (
       !force &&
@@ -655,10 +672,8 @@ export class YoutubeBrowseService {
     ) {
       return this.personalizedCache.tracks.filter(
         (t) =>
-          !analysis.sessionExcludedIds.has(t.id) &&
-          !analysis.sessionExcludedMetaKeys.has(
-            normalizeMetaKey(t.title, t.artist)
-          )
+          !excludedIds.has(t.id) &&
+          !excludedMeta.has(normalizeMetaKey(t.title, t.artist))
       );
     }
 
@@ -685,60 +700,141 @@ export class YoutubeBrowseService {
     }
 
     const yt = await this.getClient();
-    const seenIds = new Set<string>([
-      ...analysis.skippedVideoIds,
-      ...analysis.sessionExcludedIds,
-    ]);
     for (const seed of analysis.seedTracks) {
-      if (seed.videoId) seenIds.add(seed.videoId);
+      if (seed.videoId) excludedIds.add(seed.videoId);
     }
 
+    const topArtistSeeds = force
+      ? this.shuffleInPlace([...analysis.topArtists]).slice(0, 2)
+      : analysis.topArtists.slice(0, 2);
+
+    // Fetch YouTube Music UpNext + Last.fm similar tracks & related artists in parallel
+    const [ytResults, lfmTrackResults, lfmArtistResults] = await Promise.all([
+      Promise.allSettled(
+        selectedSeeds.map(async (seed) => {
+          if (!seed.videoId) return { seed, items: [] as SearchTrackResult[] };
+          const upNext = await yt.music.getUpNext(seed.videoId, true);
+          const contents =
+            (upNext as unknown as { contents?: unknown[] }).contents ?? [];
+          const items: SearchTrackResult[] = [];
+          for (const raw of contents) {
+            const parsed = toTrackResult(raw);
+            if (parsed) items.push(parsed);
+          }
+          return { seed, items };
+        })
+      ),
+      Promise.allSettled(
+        selectedSeeds.map(async (seed) => ({
+          seed,
+          items: await this.lastFm.getSimilarTracks(seed.artist, seed.title, 12),
+        }))
+      ),
+      Promise.allSettled(
+        topArtistSeeds.map(async (artistName) => ({
+          artistName,
+          items: await this.lastFm.getSimilarArtists(artistName, 5),
+        }))
+      ),
+    ]);
+
+    // Track Last.fm match boosts & co-occurrence across seeds
+    const lfmBoostByMeta = new Map<
+      string,
+      { title: string; artist: string; match: number; seedTitle: string; count: number }
+    >();
+    for (const res of lfmTrackResults) {
+      if (res.status !== "fulfilled") continue;
+      const { seed, items } = res.value;
+      for (const lfm of items) {
+        const meta = normalizeMetaKey(lfm.title, lfm.artist);
+        if (excludedMeta.has(meta)) continue;
+        const existing = lfmBoostByMeta.get(meta);
+        if (existing) {
+          existing.count += 1;
+          if (lfm.match > existing.match) {
+            existing.match = lfm.match;
+            existing.seedTitle = seed.title;
+          }
+        } else {
+          lfmBoostByMeta.set(meta, {
+            title: lfm.title,
+            artist: lfm.artist,
+            match: lfm.match,
+            seedTitle: seed.title,
+            count: 1,
+          });
+        }
+      }
+    }
+
+    // Track YouTube Music candidates and co-occurrence across seeds
+    const ytMatchCount = new Map<string, number>();
+    for (const res of ytResults) {
+      if (res.status !== "fulfilled") continue;
+      const seenInSeed = new Set<string>();
+      for (const item of res.value.items) {
+        if (!item.id || seenInSeed.has(item.id)) continue;
+        seenInSeed.add(item.id);
+        ytMatchCount.set(item.id, (ytMatchCount.get(item.id) ?? 0) + 1);
+      }
+    }
+
+    const seenCandidateIds = new Set<string>(excludedIds);
+    const seenCandidateMeta = new Set<string>(excludedMeta);
     const artistCounts = new Map<string, number>();
 
-    const seedResults = await Promise.allSettled(
-      selectedSeeds.map(async (seed) => {
-        if (!seed.videoId) return { seed, items: [] as SearchTrackResult[] };
-        const upNext = await yt.music.getUpNext(seed.videoId, true);
-        const contents =
-          (upNext as unknown as { contents?: unknown[] }).contents ?? [];
-        const items: SearchTrackResult[] = [];
-        for (const raw of contents) {
-          const parsed = toTrackResult(raw);
-          if (parsed) items.push(parsed);
-        }
-        return { seed, items };
-      })
-    );
-
-    // Build per-seed buckets so every seed contributes evenly (round-robin)
+    const coOccurring: PersonalizedTrackRecommendation[] = [];
     const perSeedBuckets: PersonalizedTrackRecommendation[][] = [];
-    for (const res of seedResults) {
+
+    for (const res of ytResults) {
       if (res.status !== "fulfilled") continue;
       const { seed, items } = res.value;
       const orderedItems = force ? this.shuffleInPlace([...items]) : items;
       const bucket: PersonalizedTrackRecommendation[] = [];
 
       for (const item of orderedItems) {
-        if (!item.id || seenIds.has(item.id)) continue;
+        const meta = normalizeMetaKey(item.title, item.artist);
         if (
-          analysis.sessionExcludedMetaKeys.has(
-            normalizeMetaKey(item.title, item.artist)
-          )
+          !item.id ||
+          seenCandidateIds.has(item.id) ||
+          seenCandidateMeta.has(meta)
         ) {
           continue;
         }
-        seenIds.add(item.id);
+        seenCandidateIds.add(item.id);
+        seenCandidateMeta.add(meta);
 
         const artistKey = item.artist.trim().toLowerCase();
         const artistCount = artistCounts.get(artistKey) ?? 0;
         if (artistCount >= 2) continue;
         artistCounts.set(artistKey, artistCount + 1);
 
-        bucket.push({
+        const ytHits = ytMatchCount.get(item.id) ?? 1;
+        const lfmHit = lfmBoostByMeta.get(meta);
+        const totalHits = ytHits + (lfmHit ? 1 : 0);
+
+        let reason = seed.reason;
+        let bonus = 0;
+        if (ytHits >= 2) {
+          reason = `${ytHits} favorinle ortak eşleşme`;
+          bonus = ytHits * 5;
+        } else if (lfmHit && lfmHit.match > 0.2) {
+          reason = `Last.fm • ${lfmHit.seedTitle} (%${Math.round(lfmHit.match * 100)} uyum)`;
+          bonus = lfmHit.match * 6;
+        }
+
+        const rec: PersonalizedTrackRecommendation = {
           ...item,
-          reason: seed.reason,
-          score: seed.score,
-        });
+          reason,
+          score: seed.score + bonus,
+        };
+
+        if (totalHits >= 2) {
+          coOccurring.push(rec);
+        } else {
+          bucket.push(rec);
+        }
       }
 
       if (bucket.length > 0) {
@@ -746,10 +842,99 @@ export class YoutubeBrowseService {
       }
     }
 
-    // Round-robin interleave across seeds so recommendations blend multiple songs
+    // Resolve top Last.fm similar tracks & related-artist tracks not yet in YouTube UpNext
+    const unresolvedLfm = Array.from(lfmBoostByMeta.entries())
+      .filter(([meta]) => !seenCandidateMeta.has(meta))
+      .sort((a, b) => b[1].count - a[1].count || b[1].match - a[1].match)
+      .slice(0, force ? 8 : 4);
+
+    const relatedArtistsToExplore: { name: string; sourceArtist: string }[] = [];
+    const seenRelatedArtist = new Set(
+      analysis.topArtists.map((a) => a.toLowerCase())
+    );
+    for (const res of lfmArtistResults) {
+      if (res.status !== "fulfilled") continue;
+      const ordered = force
+        ? this.shuffleInPlace([...res.value.items])
+        : res.value.items;
+      for (const rel of ordered) {
+        const lower = rel.name.toLowerCase();
+        if (seenRelatedArtist.has(lower)) continue;
+        seenRelatedArtist.add(lower);
+        relatedArtistsToExplore.push({
+          name: rel.name,
+          sourceArtist: res.value.artistName,
+        });
+        if (relatedArtistsToExplore.length >= 3) break;
+      }
+      if (relatedArtistsToExplore.length >= 3) break;
+    }
+
+    const searchQueries: Array<{ query: string; reason: string; bonus: number }> =
+      [
+        ...(force ? this.shuffleInPlace(unresolvedLfm) : unresolvedLfm)
+          .slice(0, 4)
+          .map(([, info]) => ({
+            query: `${info.artist} ${info.title}`,
+            reason:
+              info.count >= 2
+                ? `Last.fm • ${info.count} favorinle ortak`
+                : `Last.fm • ${info.seedTitle} (%${Math.round(info.match * 100)} uyum)`,
+            bonus: info.count * 4 + info.match * 5,
+          })),
+        ...relatedArtistsToExplore.slice(0, 2).map((rel) => ({
+          query: `${rel.name} top song`,
+          reason: `Benzer sanatçı: ${rel.sourceArtist}`,
+          bonus: 4,
+        })),
+      ];
+
+    const resolvedExternal: PersonalizedTrackRecommendation[] = [];
+    if (searchQueries.length > 0) {
+      const searchResults = await Promise.allSettled(
+        searchQueries.map(async (q) => {
+          const res = await yt.music.search(q.query, { type: "song" });
+          const contents =
+            (res as unknown as { songs?: { contents?: unknown[] } }).songs
+              ?.contents ?? [];
+          for (const raw of contents) {
+            const parsed = toTrackResult(raw);
+            if (parsed) return { track: parsed, reason: q.reason, bonus: q.bonus };
+          }
+          return null;
+        })
+      );
+
+      for (const r of searchResults) {
+        if (r.status !== "fulfilled" || !r.value) continue;
+        const { track, reason, bonus } = r.value;
+        const meta = normalizeMetaKey(track.title, track.artist);
+        if (
+          seenCandidateIds.has(track.id) ||
+          seenCandidateMeta.has(meta)
+        ) {
+          continue;
+        }
+        seenCandidateIds.add(track.id);
+        seenCandidateMeta.add(meta);
+
+        const artistKey = track.artist.trim().toLowerCase();
+        const artistCount = artistCounts.get(artistKey) ?? 0;
+        if (artistCount >= 2) continue;
+        artistCounts.set(artistKey, artistCount + 1);
+
+        resolvedExternal.push({
+          ...track,
+          reason,
+          score: 8 + bonus,
+        });
+      }
+    }
+
+    // Round-robin interleave YouTube UpNext buckets
     const interleaved: PersonalizedTrackRecommendation[] = [];
     let round = 0;
-    while (interleaved.length < 48) {
+    while (interleaved.length < 40) {
       let addedInRound = false;
       for (const bucket of perSeedBuckets) {
         if (round < bucket.length) {
@@ -761,13 +946,16 @@ export class YoutubeBrowseService {
       round += 1;
     }
 
-    // Prefer fresh (unheard) tracks and deprioritize recently shown tracks on refresh
+    // Blend: co-occurring + Last.fm/related-artist gems + fresh UpNext + familiar
+    coOccurring.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    const orderedPool = [...coOccurring, ...resolvedExternal, ...interleaved];
+
     const recentSet = new Set(this.recentPersonalizedIds);
     const freshNew: PersonalizedTrackRecommendation[] = [];
     const familiarNew: PersonalizedTrackRecommendation[] = [];
     const previouslyShown: PersonalizedTrackRecommendation[] = [];
 
-    for (const rec of interleaved) {
+    for (const rec of orderedPool) {
       if (force && recentSet.has(rec.id)) {
         previouslyShown.push(rec);
       } else if (analysis.allTrackedVideoIds.has(rec.id)) {
