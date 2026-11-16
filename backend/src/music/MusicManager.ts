@@ -24,7 +24,7 @@ import type {
   ReorderPayload,
   SearchTrackResult,
 } from "../types.js";
-import { StatsStore } from "./StatsStore.js";
+import { StatsStore, type ListeningAnalysisProfile } from "./StatsStore.js";
 import { YoutubeBrowseService } from "./YoutubeBrowseService.js";
 
 const URL_REGEX = /^https?:\/\//i;
@@ -282,6 +282,9 @@ export class MusicManager {
 
     player.on("end", (reason) => {
       if (reason.reason === "replaced") return;
+      if (reason.reason === "finished" && this.currentTrack) {
+        this.statsStore.recordComplete(this.currentTrack);
+      }
       void this.playNext();
     });
 
@@ -751,6 +754,8 @@ export class MusicManager {
 
   public async skip(): Promise<void> {
     if (!this.player || !this.currentTrack) return;
+    const playedSeconds = Math.floor(this.getCurrentPositionMs() / 1000);
+    this.statsStore.recordSkip(this.currentTrack, playedSeconds);
     await this.player.stopTrack();
   }
 
@@ -807,6 +812,10 @@ export class MusicManager {
 
   public getStats(): ListeningStats {
     return this.statsStore.getSummary();
+  }
+
+  public getAnalysisProfile(): ListeningAnalysisProfile {
+    return this.statsStore.getAnalysisProfile();
   }
 
   private emitState(): void {

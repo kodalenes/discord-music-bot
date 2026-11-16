@@ -5,11 +5,13 @@ import type {
   BrowseSearchResult,
   ExploreFeed,
   LyricsResult,
+  PersonalizedTrackRecommendation,
   PlaylistDetails,
   PlaylistSearchResult,
   SearchTrackResult,
   SyncedLyricLine,
 } from "../types.js";
+import type { ListeningAnalysisProfile } from "./StatsStore.js";
 
 interface RawThumb {
   url?: string;
@@ -145,7 +147,15 @@ export class YoutubeBrowseService {
   private ytPromise: Promise<Innertube> | null = null;
   private lyricsCache = new Map<string, LyricsResult | null>();
   private lyricsInFlight = new Map<string, Promise<LyricsResult | null>>();
-  private exploreCache: { data: ExploreFeed; expiresAt: number } | null = null;
+  private exploreCache: {
+    data: { trendingTracks: SearchTrackResult[]; playlists: PlaylistSearchResult[] };
+    expiresAt: number;
+  } | null = null;
+  private personalizedCache: {
+    key: string;
+    tracks: PersonalizedTrackRecommendation[];
+    expiresAt: number;
+  } | null = null;
 
   private getClient(): Promise<Innertube> {
     if (!this.ytPromise) {
@@ -519,7 +529,26 @@ export class YoutubeBrowseService {
     return null;
   }
 
-  public async getExploreFeed(): Promise<ExploreFeed> {
+  public async getExploreFeed(
+    analysis?: ListeningAnalysisProfile
+  ): Promise<ExploreFeed> {
+    const [base, personalizedTracks] = await Promise.all([
+      this.getBaseExploreFeed(),
+      this.getPersonalizedRecommendations(analysis),
+    ]);
+
+    return {
+      personalizedTracks,
+      rediscoverTracks: analysis?.rediscoverTracks ?? [],
+      trendingTracks: base.trendingTracks,
+      playlists: base.playlists,
+    };
+  }
+
+  private async getBaseExploreFeed(): Promise<{
+    trendingTracks: SearchTrackResult[];
+    playlists: PlaylistSearchResult[];
+  }> {
     if (this.exploreCache && Date.now() < this.exploreCache.expiresAt) {
       return this.exploreCache.data;
     }
@@ -581,9 +610,84 @@ export class YoutubeBrowseService {
       }
     }
 
-    const data: ExploreFeed = { trendingTracks, playlists };
+    const data = { trendingTracks, playlists };
     this.exploreCache = { data, expiresAt: Date.now() + 10 * 60 * 1000 };
     return data;
+  }
+
+  private async getPersonalizedRecommendations(
+    analysis?: ListeningAnalysisProfile
+  ): Promise<PersonalizedTrackRecommendation[]> {
+    if (!analysis || analysis.seedTracks.length === 0) {
+      return [];
+    }
+
+    const cacheKey = `${analysis.currentBucket}:${analysis.seedTracks.map((s) => s.key).join(",")}`;
+    if (
+      this.personalizedCache &&
+      this.personalizedCache.key === cacheKey &&
+      Date.now() < this.personalizedCache.expiresAt
+    ) {
+      return this.personalizedCache.tracks;
+    }
+
+    const yt = await this.getClient();
+    const seenIds = new Set<string>(analysis.skippedVideoIds);
+    for (const seed of analysis.seedTracks) {
+      if (seed.videoId) seenIds.add(seed.videoId);
+    }
+
+    const freshCandidates: PersonalizedTrackRecommendation[] = [];
+    const familiarCandidates: PersonalizedTrackRecommendation[] = [];
+    const artistCounts = new Map<string, number>();
+
+    const seedResults = await Promise.allSettled(
+      analysis.seedTracks.map(async (seed) => {
+        if (!seed.videoId) return { seed, items: [] as SearchTrackResult[] };
+        const upNext = await yt.music.getUpNext(seed.videoId, true);
+        const contents = (upNext as unknown as { contents?: unknown[] }).contents ?? [];
+        const items: SearchTrackResult[] = [];
+        for (const raw of contents) {
+          const parsed = toTrackResult(raw);
+          if (parsed) items.push(parsed);
+        }
+        return { seed, items };
+      })
+    );
+
+    for (const res of seedResults) {
+      if (res.status !== "fulfilled") continue;
+      const { seed, items } = res.value;
+      for (const item of items) {
+        if (!item.id || seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+
+        const artistKey = item.artist.trim().toLowerCase();
+        const artistCount = artistCounts.get(artistKey) ?? 0;
+        if (artistCount >= 2) continue;
+        artistCounts.set(artistKey, artistCount + 1);
+
+        const rec: PersonalizedTrackRecommendation = {
+          ...item,
+          reason: seed.reason,
+          score: seed.score,
+        };
+
+        if (analysis.allTrackedVideoIds.has(item.id)) {
+          familiarCandidates.push(rec);
+        } else {
+          freshCandidates.push(rec);
+        }
+      }
+    }
+
+    const combined = [...freshCandidates, ...familiarCandidates].slice(0, 12);
+    this.personalizedCache = {
+      key: cacheKey,
+      tracks: combined,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    };
+    return combined;
   }
 
   public async getSimilarTracks(payload: {

@@ -427,14 +427,20 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
 
     socket.on("browse:explore", async (callback) => {
       try {
-        const feed = await browseService.getExploreFeed();
+        const analysis = manager.getAnalysisProfile();
+        const feed = await browseService.getExploreFeed(analysis);
         callback(feed);
       } catch (err) {
         console.error(
           "[Socket.io] browse:explore error:",
           err instanceof Error ? err.message : err
         );
-        callback({ trendingTracks: [], playlists: [] });
+        callback({
+          personalizedTracks: [],
+          rediscoverTracks: [],
+          trendingTracks: [],
+          playlists: [],
+        });
       }
     });
 

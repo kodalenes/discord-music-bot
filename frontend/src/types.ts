@@ -29,7 +29,14 @@ export interface ActivityNotice {
   timestamp: number;
 }
 
+export interface PersonalizedTrackRecommendation extends SearchResult {
+  reason: string;
+  score?: number;
+}
+
 export interface ExploreFeed {
+  personalizedTracks: PersonalizedTrackRecommendation[];
+  rediscoverTracks: PersonalizedTrackRecommendation[];
   trendingTracks: SearchResult[];
   playlists: PlaylistSearchResult[];
 }

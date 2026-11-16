@@ -244,7 +244,12 @@ export function useSocket(pin: string | null, nickname: string) {
       const timer = window.setTimeout(() => {
         if (!settled) {
           settled = true;
-          resolve({ trendingTracks: [], playlists: [] });
+          resolve({
+            personalizedTracks: [],
+            rediscoverTracks: [],
+            trendingTracks: [],
+            playlists: [],
+          });
         }
       }, 8000);
 
@@ -252,7 +257,14 @@ export function useSocket(pin: string | null, nickname: string) {
         if (!settled) {
           settled = true;
           window.clearTimeout(timer);
-          resolve(feed || { trendingTracks: [], playlists: [] });
+          resolve(
+            feed || {
+              personalizedTracks: [],
+              rediscoverTracks: [],
+              trendingTracks: [],
+              playlists: [],
+            }
+          );
         }
       });
     });
