@@ -344,7 +344,7 @@ export class StatsStore {
     const seedTracks: SeedTrackAnalysis[] = scored
       .filter((s) => s.seedScore > 0 && (s.videoId !== null || Boolean(s.track.uri)))
       .sort((a, b) => b.seedScore - a.seedScore)
-      .slice(0, 3)
+      .slice(0, 10)
       .map((s) => ({
         key: s.track.key,
         videoId: s.videoId,

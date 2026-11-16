@@ -159,6 +159,7 @@ export class YoutubeBrowseService {
     tracks: PersonalizedTrackRecommendation[];
     expiresAt: number;
   } | null = null;
+  private recentPersonalizedIds: string[] = [];
 
   private getClient(): Promise<Innertube> {
     if (!this.ytPromise) {
@@ -629,6 +630,14 @@ export class YoutubeBrowseService {
     return data;
   }
 
+  private shuffleInPlace<T>(arr: T[]): T[] {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
   private async getPersonalizedRecommendations(
     analysis?: ListeningAnalysisProfile,
     force = false
@@ -653,6 +662,28 @@ export class YoutubeBrowseService {
       );
     }
 
+    // Pick up to 4 diverse-artist seeds from the top-10 pool (shuffled on refresh)
+    const seedPool = force
+      ? this.shuffleInPlace([...analysis.seedTracks])
+      : [...analysis.seedTracks];
+    const selectedSeeds: typeof analysis.seedTracks = [];
+    const seedArtists = new Set<string>();
+
+    for (const s of seedPool) {
+      if (selectedSeeds.length >= 4) break;
+      const artistKey = s.artist.trim().toLowerCase();
+      if (!seedArtists.has(artistKey) || seedPool.length <= 4) {
+        selectedSeeds.push(s);
+        seedArtists.add(artistKey);
+      }
+    }
+    for (const s of seedPool) {
+      if (selectedSeeds.length >= 4) break;
+      if (!selectedSeeds.includes(s)) {
+        selectedSeeds.push(s);
+      }
+    }
+
     const yt = await this.getClient();
     const seenIds = new Set<string>([
       ...analysis.skippedVideoIds,
@@ -662,15 +693,14 @@ export class YoutubeBrowseService {
       if (seed.videoId) seenIds.add(seed.videoId);
     }
 
-    const freshCandidates: PersonalizedTrackRecommendation[] = [];
-    const familiarCandidates: PersonalizedTrackRecommendation[] = [];
     const artistCounts = new Map<string, number>();
 
     const seedResults = await Promise.allSettled(
-      analysis.seedTracks.map(async (seed) => {
+      selectedSeeds.map(async (seed) => {
         if (!seed.videoId) return { seed, items: [] as SearchTrackResult[] };
         const upNext = await yt.music.getUpNext(seed.videoId, true);
-        const contents = (upNext as unknown as { contents?: unknown[] }).contents ?? [];
+        const contents =
+          (upNext as unknown as { contents?: unknown[] }).contents ?? [];
         const items: SearchTrackResult[] = [];
         for (const raw of contents) {
           const parsed = toTrackResult(raw);
@@ -680,10 +710,15 @@ export class YoutubeBrowseService {
       })
     );
 
+    // Build per-seed buckets so every seed contributes evenly (round-robin)
+    const perSeedBuckets: PersonalizedTrackRecommendation[][] = [];
     for (const res of seedResults) {
       if (res.status !== "fulfilled") continue;
       const { seed, items } = res.value;
-      for (const item of items) {
+      const orderedItems = force ? this.shuffleInPlace([...items]) : items;
+      const bucket: PersonalizedTrackRecommendation[] = [];
+
+      for (const item of orderedItems) {
         if (!item.id || seenIds.has(item.id)) continue;
         if (
           analysis.sessionExcludedMetaKeys.has(
@@ -699,30 +734,63 @@ export class YoutubeBrowseService {
         if (artistCount >= 2) continue;
         artistCounts.set(artistKey, artistCount + 1);
 
-        const rec: PersonalizedTrackRecommendation = {
+        bucket.push({
           ...item,
           reason: seed.reason,
           score: seed.score,
-        };
+        });
+      }
 
-        if (analysis.allTrackedVideoIds.has(item.id)) {
-          familiarCandidates.push(rec);
-        } else {
-          freshCandidates.push(rec);
-        }
+      if (bucket.length > 0) {
+        perSeedBuckets.push(bucket);
       }
     }
 
-    if (force) {
-      for (const arr of [freshCandidates, familiarCandidates]) {
-        for (let i = arr.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [arr[i], arr[j]] = [arr[j], arr[i]];
+    // Round-robin interleave across seeds so recommendations blend multiple songs
+    const interleaved: PersonalizedTrackRecommendation[] = [];
+    let round = 0;
+    while (interleaved.length < 48) {
+      let addedInRound = false;
+      for (const bucket of perSeedBuckets) {
+        if (round < bucket.length) {
+          interleaved.push(bucket[round]);
+          addedInRound = true;
         }
+      }
+      if (!addedInRound) break;
+      round += 1;
+    }
+
+    // Prefer fresh (unheard) tracks and deprioritize recently shown tracks on refresh
+    const recentSet = new Set(this.recentPersonalizedIds);
+    const freshNew: PersonalizedTrackRecommendation[] = [];
+    const familiarNew: PersonalizedTrackRecommendation[] = [];
+    const previouslyShown: PersonalizedTrackRecommendation[] = [];
+
+    for (const rec of interleaved) {
+      if (force && recentSet.has(rec.id)) {
+        previouslyShown.push(rec);
+      } else if (analysis.allTrackedVideoIds.has(rec.id)) {
+        familiarNew.push(rec);
+      } else {
+        freshNew.push(rec);
       }
     }
 
-    const combined = [...freshCandidates, ...familiarCandidates].slice(0, 12);
+    const combined = [...freshNew, ...familiarNew, ...previouslyShown].slice(
+      0,
+      12
+    );
+
+    if (combined.length > 0) {
+      this.recentPersonalizedIds = [
+        ...combined.map((c) => c.id),
+        ...this.recentPersonalizedIds.filter(
+          (id) => !combined.some((c) => c.id === id)
+        ),
+      ].slice(0, 36);
+    }
+
     this.personalizedCache = {
       key: cacheKey,
       tracks: combined,
