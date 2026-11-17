@@ -167,62 +167,72 @@ export function CaseOpeningModal({
     setWinner(pickedWinner);
     setReel(builtReel);
     setPhase("spinning");
-
     playCaseUnlockSound(mutedRef.current);
-
-    // Wait a frame so viewportRef & trackRef mount
-    requestAnimationFrame(() => {
-      if (!isOpenRef.current) return;
-      const viewportWidth = viewportRef.current?.clientWidth || 720;
-      const centerOffset = viewportWidth / 2;
-
-      // Landing offset with slight random CS2-style off-center suspense (±42px)
-      const jitter = (Math.random() - 0.5) * 84;
-      const startX = Math.max(0, 2 * STEP - centerOffset);
-      const targetCenterOfWinCard = WIN_INDEX * STEP + CARD_WIDTH / 2 + jitter;
-      const endX = targetCenterOfWinCard - centerOffset;
-
-      const startTime = performance.now();
-      let lastTickIndex = Math.floor((startX + centerOffset) / STEP);
-
-      const step = (now: number) => {
-        if (!isOpenRef.current) return;
-        const elapsed = now - startTime;
-        const t = Math.min(1, elapsed / SPIN_DURATION_MS);
-        // Quintic ease-out for long, suspenseful CS2 slowdown
-        const eased = 1 - Math.pow(1 - t, 4.35);
-        const currentX = startX + (endX - startX) * eased;
-
-        if (trackRef.current) {
-          trackRef.current.style.transform = `translate3d(${-currentX}px, 0, 0)`;
-        }
-
-        const currentIndex = Math.floor((currentX + centerOffset) / STEP);
-        if (currentIndex !== lastTickIndex) {
-          lastTickIndex = currentIndex;
-          playCaseTickSound(t, mutedRef.current);
-          if (needleRef.current) {
-            needleRef.current.style.filter = "brightness(1.8)";
-            window.setTimeout(() => {
-              if (needleRef.current) needleRef.current.style.filter = "";
-            }, 45);
-          }
-        }
-
-        if (t < 1) {
-          rafRef.current = requestAnimationFrame(step);
-        } else {
-          rafRef.current = null;
-          setPhase("revealed");
-          playCaseRevealSound(pickedWinner.rarity, mutedRef.current);
-          onPlayNextRef.current(pickedWinner.uri);
-          setQueuedNext(true);
-        }
-      };
-
-      rafRef.current = requestAnimationFrame(step);
-    });
   }, [stopAnimation]);
+
+  // Run the reel animation AFTER React commits the mounted viewport & cards to DOM
+  useEffect(() => {
+    if (!isOpen || phase !== "spinning" || !winner || reel.length === 0) {
+      return;
+    }
+
+    const viewportEl = viewportRef.current;
+    const trackEl = trackRef.current;
+    if (!viewportEl || !trackEl) return;
+
+    const viewportWidth = viewportEl.clientWidth;
+    const centerOffset = viewportWidth / 2;
+
+    const winCardEl = trackEl.children[WIN_INDEX] as HTMLElement | undefined;
+    const winCardCenter = winCardEl
+      ? winCardEl.offsetLeft + winCardEl.offsetWidth / 2
+      : WIN_INDEX * STEP + CARD_WIDTH / 2;
+
+    // Subtle off-center landing jitter strictly inside the winning card (±32px)
+    const jitter = (Math.random() - 0.5) * 64;
+    const startX = Math.max(0, 2 * STEP - centerOffset);
+    const endX = winCardCenter + jitter - centerOffset;
+
+    const startTime = performance.now();
+    let lastTickIndex = Math.floor((startX + centerOffset) / STEP);
+
+    const step = (now: number) => {
+      if (!isOpenRef.current) return;
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / SPIN_DURATION_MS);
+      const eased = 1 - Math.pow(1 - t, 4.35);
+      const currentX = startX + (endX - startX) * eased;
+
+      if (trackRef.current) {
+        trackRef.current.style.transform = `translate3d(${-currentX}px, 0, 0)`;
+      }
+
+      const currentIndex = Math.floor((currentX + centerOffset) / STEP);
+      if (currentIndex !== lastTickIndex) {
+        lastTickIndex = currentIndex;
+        playCaseTickSound(t, mutedRef.current);
+        if (needleRef.current) {
+          needleRef.current.style.filter = "brightness(1.8)";
+          window.setTimeout(() => {
+            if (needleRef.current) needleRef.current.style.filter = "";
+          }, 45);
+        }
+      }
+
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        rafRef.current = null;
+        setPhase("revealed");
+        playCaseRevealSound(winner.rarity, mutedRef.current);
+        onPlayNextRef.current(winner.uri);
+        setQueuedNext(true);
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+    return () => stopAnimation();
+  }, [isOpen, phase, winner, reel, stopAnimation]);
 
   useEffect(() => {
     if (!isOpen) {
