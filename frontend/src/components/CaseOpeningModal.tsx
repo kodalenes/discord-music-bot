@@ -134,6 +134,12 @@ export function CaseOpeningModal({
   const rafRef = useRef<number | null>(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+  const onFetchPoolRef = useRef(onFetchPool);
+  onFetchPoolRef.current = onFetchPool;
+  const onPlayNextRef = useRef(onPlayNext);
+  onPlayNextRef.current = onPlayNext;
 
   const stopAnimation = useCallback(() => {
     if (rafRef.current !== null) {
@@ -149,7 +155,8 @@ export function CaseOpeningModal({
     setQueuedNext(false);
     setReel([]);
 
-    const pool = await onFetchPool();
+    const pool = await onFetchPoolRef.current();
+    if (!isOpenRef.current) return;
     if (!pool || pool.length === 0) {
       setPhase("empty");
       return;
@@ -165,6 +172,7 @@ export function CaseOpeningModal({
 
     // Wait a frame so viewportRef & trackRef mount
     requestAnimationFrame(() => {
+      if (!isOpenRef.current) return;
       const viewportWidth = viewportRef.current?.clientWidth || 720;
       const centerOffset = viewportWidth / 2;
 
@@ -178,6 +186,7 @@ export function CaseOpeningModal({
       let lastTickIndex = Math.floor((startX + centerOffset) / STEP);
 
       const step = (now: number) => {
+        if (!isOpenRef.current) return;
         const elapsed = now - startTime;
         const t = Math.min(1, elapsed / SPIN_DURATION_MS);
         // Quintic ease-out for long, suspenseful CS2 slowdown
@@ -206,14 +215,14 @@ export function CaseOpeningModal({
           rafRef.current = null;
           setPhase("revealed");
           playCaseRevealSound(pickedWinner.rarity, mutedRef.current);
-          onPlayNext(pickedWinner.uri);
+          onPlayNextRef.current(pickedWinner.uri);
           setQueuedNext(true);
         }
       };
 
       rafRef.current = requestAnimationFrame(step);
     });
-  }, [onFetchPool, onPlayNext, stopAnimation]);
+  }, [stopAnimation]);
 
   useEffect(() => {
     if (!isOpen) {
