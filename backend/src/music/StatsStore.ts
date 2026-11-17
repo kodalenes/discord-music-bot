@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  CaseRarity,
+  CaseTrackItem,
   DislikedTrack,
   LikedTrack,
   ListeningStats,
@@ -49,6 +51,7 @@ export interface SeedTrackAnalysis {
 export interface ListeningAnalysisProfile {
   seedTracks: SeedTrackAnalysis[];
   rediscoverTracks: PersonalizedTrackRecommendation[];
+  caseTracks: CaseTrackItem[];
   skippedVideoIds: Set<string>;
   dismissedIds: Set<string>;
   dismissedMetaKeys: Set<string>;
@@ -519,9 +522,73 @@ export class StatsStore {
       .slice(0, 5)
       .map((a) => a.artist);
 
+    // Build top-10 Most Played map so those songs shine as Gold (★) in the CS2 Case
+    const top10Tracks = [...allTracks]
+      .sort((a, b) => b.playCount - a.playCount || b.lastPlayedAt - a.lastPlayedAt)
+      .slice(0, 10);
+    const topRankByKey = new Map<string, number>();
+    top10Tracks.forEach((t, idx) => {
+      topRankByKey.set(t.key, idx + 1);
+    });
+
+    const caseTracks: CaseTrackItem[] = [];
+    const seenCaseKeys = new Set<string>();
+    const shuffledScored = [...scored].sort(() => Math.random() - 0.5);
+
+    for (const s of shuffledScored) {
+      const t = s.track;
+      if (!t.uri) continue;
+      const metaKey = normalizeMetaKey(t.title, t.artist);
+      if (s.videoId && (sessionExcludedIds.has(s.videoId) || dismissedIds.has(s.videoId) || skippedVideoIds.has(s.videoId))) {
+        continue;
+      }
+      if (sessionExcludedMetaKeys.has(metaKey) || dismissedMetaKeys.has(metaKey)) {
+        continue;
+      }
+      if (seenCaseKeys.has(metaKey)) continue;
+      seenCaseKeys.add(metaKey);
+
+      const isLiked =
+        (s.videoId !== null && likedVideoIds.has(s.videoId)) ||
+        likedMetaKeys.has(metaKey);
+      const topRank = topRankByKey.get(t.key);
+
+      let rarity: CaseRarity = "milspec";
+      let reason = "Dinleme geçmişinden";
+      if (topRank !== undefined) {
+        rarity = "gold";
+        reason = `★ En Çok Dinlenen #${topRank} (${t.playCount}x)`;
+      } else if (isLiked || t.playCount >= 4) {
+        rarity = "covert";
+        reason = isLiked
+          ? `♥ Beğenilen • ${t.playCount}x dinledin`
+          : `${t.playCount}x dinledin`;
+      } else if (t.playCount >= 2 || (t.completedCount ?? 0) >= 2) {
+        rarity = "classified";
+        reason = `${t.playCount}x dinledin`;
+      } else if ((t.completedCount ?? 0) >= 1) {
+        rarity = "restricted";
+        reason = "Tamamlanan dinleme";
+      }
+
+      caseTracks.push({
+        id: s.videoId || t.key,
+        title: t.title,
+        artist: t.artist,
+        duration: t.duration,
+        thumbnail: t.thumbnail,
+        uri: t.uri,
+        rarity,
+        reason,
+      });
+
+      if (caseTracks.length >= 40) break;
+    }
+
     return {
       seedTracks,
       rediscoverTracks,
+      caseTracks,
       skippedVideoIds,
       dismissedIds,
       dismissedMetaKeys,

@@ -572,50 +572,39 @@ export class YoutubeBrowseService {
   public async getCasePool(
     analysis?: ListeningAnalysisProfile
   ): Promise<CaseTrackItem[]> {
-    const feed = await this.getExploreFeed(analysis, true);
     const seen = new Set<string>();
     const pool: CaseTrackItem[] = [];
 
-    const pushUnique = (
-      track: SearchTrackResult,
-      rarity: CaseRarity,
-      reason: string
-    ) => {
-      const meta = normalizeMetaKey(track.title, track.artist);
-      if (!track.uri || seen.has(track.id) || seen.has(meta)) return;
-      seen.add(track.id);
+    const pushItem = (item: CaseTrackItem) => {
+      const meta = normalizeMetaKey(item.title, item.artist);
+      if (!item.uri || seen.has(item.id) || seen.has(meta)) return;
+      seen.add(item.id);
       seen.add(meta);
-      pool.push({ ...track, rarity, reason });
+      pool.push(item);
     };
 
-    const sortedPersonal = [...feed.personalizedTracks].sort(
-      (a, b) => (b.score ?? 0) - (a.score ?? 0)
-    );
-
-    sortedPersonal.forEach((t, idx) => {
-      let rarity: CaseRarity = "restricted";
-      if (idx === 0) rarity = "gold";
-      else if (idx <= 2) rarity = "covert";
-      else if (idx <= 6) rarity = "classified";
-      pushUnique(t, rarity, t.reason || "Zevk Analizi");
-    });
-
-    feed.rediscoverTracks.forEach((t, idx) => {
-      const rarity: CaseRarity = idx === 0 ? "covert" : idx <= 2 ? "classified" : "restricted";
-      pushUnique(t, rarity, t.reason || "Tekrar Keşif");
-    });
-
-    feed.trendingTracks.forEach((t, idx) => {
-      const rarity: CaseRarity = idx < 4 ? "restricted" : "milspec";
-      pushUnique(t, rarity, "Trend Önerisi");
-    });
-
-    // Guarantee at least one gold item if pool came mostly from trending
-    if (pool.length > 0 && !pool.some((p) => p.rarity === "gold")) {
-      pool[0] = { ...pool[0], rarity: "gold" };
+    for (const item of analysis?.caseTracks ?? []) {
+      pushItem(item);
     }
 
-    return pool.slice(0, 28);
+    // Only if listening history has very few eligible tracks yet, supplement with taste-based recommendations (never Trends)
+    if (pool.length < 12 && analysis && analysis.seedTracks.length > 0) {
+      const personalized = await this.getPersonalizedRecommendations(
+        analysis,
+        true
+      );
+      personalized.forEach((t, idx) => {
+        const rarity: CaseRarity =
+          idx <= 1 ? "covert" : idx <= 5 ? "classified" : "restricted";
+        pushItem({
+          ...t,
+          rarity,
+          reason: t.reason || "Zevk Analizi",
+        });
+      });
+    }
+
+    return pool.slice(0, 32);
   }
 
   private async getBaseExploreFeed(force = false): Promise<{

@@ -313,7 +313,8 @@ export function CaseOpeningModal({
             <div className="h-52 rounded-2xl bg-[#0c0e14] border border-white/10 flex flex-col items-center justify-center gap-3 text-center px-4">
               <Disc3 className="w-8 h-8 text-neutral-600" />
               <p className="text-sm text-neutral-300">
-                Kasa için uygun şarkı havuzu alınamadı.
+                Henüz kasa için yeterli dinleme geçmişi yok (veya tüm şarkılar bu
+                oturumda çalındı).
               </p>
               <button
                 onClick={() => void startSpin()}
@@ -361,10 +362,10 @@ export function CaseOpeningModal({
                                 <Crown className="w-8 h-8 text-amber-300" />
                               </div>
                               <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                                ★ Nadir Özel ★
+                                ★ En Çok Dinlenen ★
                               </p>
                               <p className="text-[10px] text-amber-200/70 mt-0.5">
-                                Süper Eşleşme
+                                Altın Nadirlik
                               </p>
                             </div>
                           ) : (
