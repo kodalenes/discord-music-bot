@@ -5,6 +5,7 @@ import type {
   ArtistProfile,
   AudioFilterPreset,
   BrowseSearchResult,
+  CaseTrackItem,
   ConnectedUser,
   CustomAudioSettings,
   CustomPlaylist,
@@ -315,6 +316,26 @@ export function useSocket(pin: string | null, nickname: string) {
     });
   }, []);
 
+  const getCasePool = useCallback((): Promise<CaseTrackItem[]> => {
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = window.setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve([]);
+        }
+      }, 9000);
+
+      socket.emit("browse:casePool", (items) => {
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timer);
+          resolve(Array.isArray(items) ? items : []);
+        }
+      });
+    });
+  }, []);
+
   const seek = useCallback((position: number) => {
     setPlayerState((prev) => ({ ...prev, position }));
     socket.emit("player:seek", position);
@@ -555,6 +576,7 @@ export function useSocket(pin: string | null, nickname: string) {
     getArtistProfile,
     getPlaylistDetails,
     getExploreFeed,
+    getCasePool,
     addTrack,
     addTracks,
     playNow,

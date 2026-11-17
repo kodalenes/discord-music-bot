@@ -478,6 +478,23 @@ export function createServer(getMusicManager: () => MusicManager): AppServer {
       }
     });
 
+    socket.on("browse:casePool", async (callback) => {
+      try {
+        const analysis = manager.getAnalysisProfile(
+          likesStore.list(),
+          dislikesStore.list()
+        );
+        const items = await browseService.getCasePool(analysis);
+        callback(items);
+      } catch (err) {
+        console.error(
+          "[Socket.io] browse:casePool error:",
+          err instanceof Error ? err.message : err
+        );
+        callback([]);
+      }
+    });
+
     socket.on("explore:dismiss", (track, callback) => {
       try {
         manager.dismissRecommendation(track);

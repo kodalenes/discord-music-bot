@@ -122,6 +122,18 @@ export interface PersonalizedTrackRecommendation extends SearchTrackResult {
   score?: number;
 }
 
+export type CaseRarity =
+  | "milspec"
+  | "restricted"
+  | "classified"
+  | "covert"
+  | "gold";
+
+export interface CaseTrackItem extends SearchTrackResult {
+  rarity: CaseRarity;
+  reason: string;
+}
+
 export interface ExploreFeed {
   personalizedTracks: PersonalizedTrackRecommendation[];
   rediscoverTracks: PersonalizedTrackRecommendation[];
@@ -396,6 +408,7 @@ export interface ClientToServerEvents {
     payload: { playlistId: string; fromIndex: number; toIndex: number },
     callback?: (ack: ActionAck) => void
   ) => void;
+  "browse:casePool": (callback: (items: CaseTrackItem[]) => void) => void;
 }
 
 export interface ServerToClientEvents {

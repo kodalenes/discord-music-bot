@@ -15,6 +15,7 @@ import {
   ListPlus,
   Plus,
   X,
+  Sparkles,
 } from "lucide-react";
 import { PinModal } from "./components/PinModal";
 import { SearchBar } from "./components/SearchBar";
@@ -28,6 +29,7 @@ import { ExploreView } from "./components/ExploreView";
 import { StatsView } from "./components/StatsView";
 import { LikedTracksView } from "./components/LikedTracksView";
 import { AudioStudioModal } from "./components/AudioStudioModal";
+import { CaseOpeningModal } from "./components/CaseOpeningModal";
 import { CustomPlaylistView } from "./components/CustomPlaylistView";
 import { TrackMenuProvider } from "./components/TrackContextMenu";
 import { useSocket } from "./hooks/useSocket";
@@ -74,6 +76,7 @@ export default function App() {
   const [showUsersMenu, setShowUsersMenu] = useState(false);
   const [pastedUrl, setPastedUrl] = useState<string | null>(null);
   const [isAudioStudioOpen, setIsAudioStudioOpen] = useState(false);
+  const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
 
   const {
     playerState,
@@ -91,6 +94,7 @@ export default function App() {
     getArtistProfile,
     getPlaylistDetails,
     getExploreFeed,
+    getCasePool,
     addTrack,
     addTracks,
     playNow,
@@ -706,6 +710,15 @@ export default function App() {
             <BarChart3 className="w-3.5 h-3.5" />
             İstatistikler
           </button>
+
+          <button
+            onClick={() => setIsCaseModalOpen(true)}
+            className="sm:ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 hover:from-amber-500/35 hover:to-orange-500/35 text-amber-200 border border-amber-400/40 shadow-lg shadow-amber-500/10 transition-all cursor-pointer active:scale-95"
+            title="Zevkine göre CS2 kasa açılışıyla sıradaki şarkıyı seç"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Şarkı Kasası Aç</span>
+          </button>
         </div>
 
         {view.kind === "queue" && (
@@ -968,6 +981,14 @@ export default function App() {
         activePreset={playerState.audioFilter}
         onSelectPreset={setAudioFilter}
         onApplySettings={setAudioSettings}
+      />
+
+      <CaseOpeningModal
+        isOpen={isCaseModalOpen}
+        onClose={() => setIsCaseModalOpen(false)}
+        onFetchPool={getCasePool}
+        onPlayNext={(uri) => playNextTrack({ uri })}
+        onPlayNow={(uri) => void playNow({ uri })}
       />
       </div>
     </TrackMenuProvider>

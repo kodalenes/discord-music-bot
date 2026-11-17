@@ -3,6 +3,8 @@ import type {
   ArtistProfile,
   ArtistSearchResult,
   BrowseSearchResult,
+  CaseRarity,
+  CaseTrackItem,
   ExploreFeed,
   LyricsResult,
   PersonalizedTrackRecommendation,
@@ -565,6 +567,55 @@ export class YoutubeBrowseService {
       trendingTracks,
       playlists: base.playlists,
     };
+  }
+
+  public async getCasePool(
+    analysis?: ListeningAnalysisProfile
+  ): Promise<CaseTrackItem[]> {
+    const feed = await this.getExploreFeed(analysis, true);
+    const seen = new Set<string>();
+    const pool: CaseTrackItem[] = [];
+
+    const pushUnique = (
+      track: SearchTrackResult,
+      rarity: CaseRarity,
+      reason: string
+    ) => {
+      const meta = normalizeMetaKey(track.title, track.artist);
+      if (!track.uri || seen.has(track.id) || seen.has(meta)) return;
+      seen.add(track.id);
+      seen.add(meta);
+      pool.push({ ...track, rarity, reason });
+    };
+
+    const sortedPersonal = [...feed.personalizedTracks].sort(
+      (a, b) => (b.score ?? 0) - (a.score ?? 0)
+    );
+
+    sortedPersonal.forEach((t, idx) => {
+      let rarity: CaseRarity = "restricted";
+      if (idx === 0) rarity = "gold";
+      else if (idx <= 2) rarity = "covert";
+      else if (idx <= 6) rarity = "classified";
+      pushUnique(t, rarity, t.reason || "Zevk Analizi");
+    });
+
+    feed.rediscoverTracks.forEach((t, idx) => {
+      const rarity: CaseRarity = idx === 0 ? "covert" : idx <= 2 ? "classified" : "restricted";
+      pushUnique(t, rarity, t.reason || "Tekrar Keşif");
+    });
+
+    feed.trendingTracks.forEach((t, idx) => {
+      const rarity: CaseRarity = idx < 4 ? "restricted" : "milspec";
+      pushUnique(t, rarity, "Trend Önerisi");
+    });
+
+    // Guarantee at least one gold item if pool came mostly from trending
+    if (pool.length > 0 && !pool.some((p) => p.rarity === "gold")) {
+      pool[0] = { ...pool[0], rarity: "gold" };
+    }
+
+    return pool.slice(0, 28);
   }
 
   private async getBaseExploreFeed(force = false): Promise<{
